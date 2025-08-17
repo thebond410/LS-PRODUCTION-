@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Settings as SettingsType } from '@/types';
 
 const settingsSchema = z.object({
+  scanApiKey: z.string().optional(),
   supabaseUrl: z.string().url().or(z.literal('')),
   supabaseKey: z.string().or(z.literal('')),
   productionTables: z.coerce.number().min(1).max(3),
@@ -126,6 +127,22 @@ export default function SettingsPage() {
                   </div>
                 </div>
               ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Scan API</CardTitle>
+              <CardDescription>Enter your API key for scanning.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <FormField control={form.control} name="scanApiKey" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Scan API Key</FormLabel>
+                  <FormControl><Input type="password" placeholder="Enter your API key" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
             </CardContent>
           </Card>
 

@@ -14,6 +14,7 @@ export type DeliveryEntry = {
 };
 
 export interface Settings {
+  scanApiKey?: string;
   supabaseUrl: string;
   supabaseKey: string;
   productionTables: number;

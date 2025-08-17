@@ -11,6 +11,7 @@ interface AppState {
 }
 
 const defaultSettings: Settings = {
+  scanApiKey: '',
   supabaseUrl: '',
   supabaseKey: '',
   productionTables: 1,
