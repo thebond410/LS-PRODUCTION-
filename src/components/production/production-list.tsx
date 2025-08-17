@@ -1,12 +1,14 @@
 
 "use client";
 
+import { useState } from "react";
 import { useAppContext } from "@/context/AppContext";
 import { ProductionEntry } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { FilePenLine, Trash2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { FilePenLine, Trash2, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "../ui/badge";
 
@@ -23,11 +25,43 @@ const filterEntriesByRange = (entries: ProductionEntry[], start?: string, end?: 
 };
 
 export function ProductionList() {
-  const { state } = useAppContext();
+  const { state, dispatch } = useAppContext();
   const { settings, productionEntries, deliveryEntries } = state;
   const { productionTables, listTakaRanges } = settings;
 
+  const [editingTaka, setEditingTaka] = useState<string | null>(null);
+  const [editedEntry, setEditedEntry] = useState<ProductionEntry | null>(null);
+
   const deliveredTakaNumbers = new Set(deliveryEntries.map(d => d.takaNumber));
+
+  const handleEditClick = (entry: ProductionEntry) => {
+    setEditingTaka(entry.takaNumber);
+    setEditedEntry(entry);
+  };
+
+  const handleCancelClick = () => {
+    setEditingTaka(null);
+    setEditedEntry(null);
+  };
+
+  const handleSaveClick = () => {
+    if (editedEntry) {
+      dispatch({ type: 'UPDATE_PRODUCTION_ENTRY', payload: editedEntry });
+      handleCancelClick();
+    }
+  };
+  
+  const handleDeleteClick = (takaNumber: string) => {
+    if (confirm(`Are you sure you want to delete Taka ${takaNumber}?`)) {
+      dispatch({ type: 'DELETE_PRODUCTION_ENTRY', payload: takaNumber });
+    }
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (editedEntry) {
+      setEditedEntry({ ...editedEntry, [e.target.name]: e.target.value });
+    }
+  };
 
   const tableData = Array.from({ length: productionTables }, (_, i) => {
     const listKey = `list${i + 1}` as keyof typeof listTakaRanges;
@@ -43,6 +77,21 @@ export function ProductionList() {
       </div>
     );
   }
+
+  const renderCellContent = (entry: ProductionEntry, field: keyof ProductionEntry) => {
+    if (editingTaka === entry.takaNumber && editedEntry) {
+      return (
+        <Input
+          name={field}
+          value={editedEntry[field]}
+          onChange={handleInputChange}
+          className="h-6 p-1 text-[10px] font-bold"
+          disabled={field === 'takaNumber'} // Don't allow editing taka number as it's the key
+        />
+      );
+    }
+    return entry[field];
+  };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[2px] px-[2px]">
@@ -67,21 +116,34 @@ export function ProductionList() {
                   {entries.map((entry) => (
                     <TableRow key={entry.takaNumber} className={cn("m-[2px]", deliveredTakaNumbers.has(entry.takaNumber) && "bg-destructive/10")}>
                       <TableCell className="p-[2px] text-[10px] font-bold relative">
-                        {entry.takaNumber}
+                        {renderCellContent(entry, 'takaNumber')}
                         {deliveredTakaNumbers.has(entry.takaNumber) && (
                           <Badge variant="destructive" className="absolute -top-2 -right-2 text-[8px] p-0.5 h-auto">Delivered</Badge>
                         )}
                       </TableCell>
-                      <TableCell className="p-[2px] text-[10px] font-bold">{entry.machineNumber}</TableCell>
-                      <TableCell className="p-[2px] text-[10px] font-bold">{entry.meter}</TableCell>
-                      <TableCell className="p-[2px] text-[10px] font-bold">{entry.date}</TableCell>
+                      <TableCell className="p-[2px] text-[10px] font-bold">{renderCellContent(entry, 'machineNumber')}</TableCell>
+                      <TableCell className="p-[2px] text-[10px] font-bold">{renderCellContent(entry, 'meter')}</TableCell>
+                      <TableCell className="p-[2px] text-[10px] font-bold">{renderCellContent(entry, 'date')}</TableCell>
                       <TableCell className="p-[2px] text-right">
-                        <Button variant="ghost" size="icon" className="h-5 w-5">
-                          <FilePenLine className="h-3 w-3" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive">
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
+                        {editingTaka === entry.takaNumber ? (
+                          <>
+                            <Button variant="ghost" size="icon" className="h-5 w-5 text-green-600" onClick={handleSaveClick}>
+                              <Check className="h-3 w-3" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive" onClick={handleCancelClick}>
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => handleEditClick(entry)}>
+                              <FilePenLine className="h-3 w-3" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive" onClick={() => handleDeleteClick(entry.takaNumber)}>
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

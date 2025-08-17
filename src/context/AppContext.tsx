@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
@@ -33,6 +34,8 @@ type Action =
   | { type: 'INITIALIZE_STATE'; payload: AppState }
   | { type: 'UPDATE_SETTINGS'; payload: Settings }
   | { type: 'ADD_PRODUCTION_ENTRIES'; payload: ProductionEntry[] }
+  | { type: 'UPDATE_PRODUCTION_ENTRY'; payload: ProductionEntry }
+  | { type: 'DELETE_PRODUCTION_ENTRY'; payload: string }
   | { type: 'ADD_DELIVERY_ENTRY'; payload: DeliveryEntry }
   | { type: 'SET_PRODUCTION_ENTRIES'; payload: ProductionEntry[] }
   | { type: 'SET_DELIVERY_ENTRIES'; payload: DeliveryEntry[] };
@@ -49,6 +52,20 @@ const appReducer = (state: AppState, action: Action): AppState => {
         (newEntry) => !state.productionEntries.some((existing) => existing.takaNumber === newEntry.takaNumber)
       );
       return { ...state, productionEntries: [...state.productionEntries, ...newEntries] };
+    case 'UPDATE_PRODUCTION_ENTRY':
+      return {
+        ...state,
+        productionEntries: state.productionEntries.map((entry) =>
+          entry.takaNumber === action.payload.takaNumber ? action.payload : entry
+        ),
+      };
+    case 'DELETE_PRODUCTION_ENTRY':
+      return {
+        ...state,
+        productionEntries: state.productionEntries.filter(
+          (entry) => entry.takaNumber !== action.payload
+        ),
+      };
     case 'ADD_DELIVERY_ENTRY':
       return { ...state, deliveryEntries: [...state.deliveryEntries, action.payload] };
     case 'SET_PRODUCTION_ENTRIES':
