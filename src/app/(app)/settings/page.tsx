@@ -59,7 +59,10 @@ export default function SettingsPage() {
 
   const form = useForm<SettingsType>({
     resolver: zodResolver(settingsSchema),
-    defaultValues: state.settings,
+    defaultValues: {
+      ...state.settings,
+      scanApiKey: state.settings.scanApiKey || '',
+    },
   });
   
   const productionTables = form.watch('productionTables');
