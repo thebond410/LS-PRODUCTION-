@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -11,13 +11,15 @@ import { Form, FormControl, FormField, FormItem, FormMessage } from "@/component
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAppContext } from "@/context/AppContext";
 import { useToast } from '@/hooks/use-toast';
-import { Camera, PlusCircle } from 'lucide-react';
+import { Camera, PlusCircle, Loader2 } from 'lucide-react';
 import { DeliveryEntry } from '@/types';
+import { extractDeliveryData } from '@/ai/flows/extract-delivery-data-from-image';
 
 const deliverySchema = z.object({
   partyName: z.string().min(2, "Party name is required"),
   lotNumber: z.string().min(1, "Lot number is required"),
   takaNumber: z.string().min(1, "Taka number is required"),
+  machineNumber: z.string().min(1, "Machine number is required"),
   meter: z.string().min(1, "Meter is required"),
 });
 
@@ -27,16 +29,81 @@ export default function DeliveryPage() {
   const { state, dispatch } = useAppContext();
   const { productionEntries, deliveryEntries } = state;
   const { toast } = useToast();
-  
+  const [isScanning, setIsScanning] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const form = useForm<DeliveryFormData>({
     resolver: zodResolver(deliverySchema),
-    defaultValues: { partyName: '', lotNumber: '', takaNumber: '', meter: '' },
+    defaultValues: { partyName: '', lotNumber: '', takaNumber: '', machineNumber: '', meter: '' },
   });
 
+  const { setValue } = form;
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsScanning(true);
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = async () => {
+      try {
+        const base64Data = reader.result as string;
+        const result = await extractDeliveryData({ photoDataUri: base64Data });
+
+        if (result) {
+          setValue('takaNumber', result.takaNumber);
+          setValue('machineNumber', result.machineNumber);
+          setValue('meter', result.meter);
+          toast({ title: 'Scan Successful', description: 'Data extracted from image.' });
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Extraction Failed",
+            description: "No data could be extracted. Please try a clearer image.",
+          });
+        }
+      } catch (error) {
+        console.error("Extraction error:", error);
+        toast({
+          variant: "destructive",
+          title: "An Error Occurred",
+          description: "Something went wrong during data extraction.",
+        });
+      } finally {
+        setIsScanning(false);
+        // Reset the file input
+        if(fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
+    };
+    reader.onerror = () => {
+      setIsScanning(false);
+      toast({
+        variant: "destructive",
+        title: "File Read Error",
+        description: "Could not read the selected file.",
+      });
+    };
+  };
+
   const onSubmit: SubmitHandler<DeliveryFormData> = (data) => {
-    const takaExists = productionEntries.some(p => p.takaNumber === data.takaNumber);
-    if (!takaExists) {
-      toast({ variant: 'destructive', title: 'Error', description: `Taka number ${data.takaNumber} not found in production.` });
+    const productionEntry = productionEntries.find(p => p.takaNumber === data.takaNumber);
+
+    if (!productionEntry) {
+      toast({ variant: 'destructive', title: 'Validation Error', description: `Taka Number not found` });
+      return;
+    }
+
+    if (productionEntry.machineNumber !== data.machineNumber) {
+      toast({ variant: 'destructive', title: 'Validation Error', description: `Machine number not match` });
+      return;
+    }
+    
+    if (productionEntry.meter !== data.meter) {
+      toast({ variant: 'destructive', title: 'Validation Error', description: `Meter not mach` });
       return;
     }
 
@@ -48,13 +115,17 @@ export default function DeliveryPage() {
 
     const newDeliveryEntry: DeliveryEntry = {
       id: new Date().toISOString(),
-      ...data,
+      partyName: data.partyName,
+      lotNumber: data.lotNumber,
       deliveryDate: new Date().toLocaleDateString('en-GB'), // dd/mm/yyyy
+      takaNumber: data.takaNumber,
+      meter: data.meter,
+      machineNumber: data.machineNumber
     };
 
     dispatch({ type: 'ADD_DELIVERY_ENTRY', payload: newDeliveryEntry });
     toast({ title: 'Success', description: `Taka ${data.takaNumber} marked as delivered.` });
-    form.reset({ ...form.getValues(), takaNumber: '', meter: '' }); 
+    form.reset({ ...form.getValues(), takaNumber: '', machineNumber: '', meter: '' });
   };
 
   return (
@@ -81,12 +152,28 @@ export default function DeliveryPage() {
                     <FormMessage />
                   </FormItem>
                 )} />
-                <Button type="button" variant="outline" size="icon" className="h-8 w-8"><Camera className="h-4 w-4" /></Button>
+                <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => fileInputRef.current?.click()} disabled={isScanning}>
+                  {isScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="sr-only"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    disabled={isScanning}
+                  />
+                </Button>
               </div>
-              <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+              <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2">
                 <FormField control={form.control} name="takaNumber" render={({ field }) => (
                   <FormItem>
                     <FormControl><Input placeholder="Taka No." {...field} className="h-8"/></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                 <FormField control={form.control} name="machineNumber" render={({ field }) => (
+                  <FormItem>
+                    <FormControl><Input placeholder="M/C No." {...field} className="h-8"/></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
