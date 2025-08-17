@@ -40,7 +40,7 @@ const extractPrompt = ai.definePrompt({
 The image contains up to four numbers, each on a new line.
 1. The first number is the Taka Number.
 2. The second number is the Machine Number.
-3. The third number is the Meter reading.
+3. The third number is the Meter reading. Meter values can be written like "120/" or "120-". You should interpret these as just "120".
 4. There might be a date present.
 
 Extract these values from the image provided.

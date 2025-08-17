@@ -80,12 +80,12 @@ export default function DeliveryPage() {
         const result = await extractDeliveryData({ photoDataUri: base64Data });
 
         if (result) {
-          setValue('takaNumber', result.takaNumber);
-          setValue('machineNumber', result.machineNumber);
-          setValue('meter', result.meter);
           
           const isValid = validateDeliveryData(result);
           if (isValid) {
+            setValue('takaNumber', result.takaNumber);
+            setValue('machineNumber', result.machineNumber);
+            setValue('meter', result.meter);
             toast({ title: 'Scan Successful', description: 'Data extracted and validated.' });
           }
           
@@ -138,7 +138,7 @@ export default function DeliveryPage() {
 
     dispatch({ type: 'ADD_DELIVERY_ENTRY', payload: newDeliveryEntry });
     toast({ title: 'Success', description: `Taka ${data.takaNumber} marked as delivered.` });
-    form.reset({ ...form.getValues(), takaNumber: '', machineNumber: '', meter: '' });
+    form.reset({ partyName: data.partyName, lotNumber: data.lotNumber, takaNumber: '', machineNumber: '', meter: '' });
   };
 
   return (
