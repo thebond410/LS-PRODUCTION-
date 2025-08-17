@@ -1,8 +1,12 @@
+
 "use client";
 
 import { useAppContext } from "@/context/AppContext";
 import { ProductionEntry } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { FilePenLine, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "../ui/badge";
 
@@ -41,43 +45,50 @@ export function ProductionList() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {tableData.map((entries, index) => (
-        <Card key={index}>
-          <CardHeader>
-            <CardTitle>List {index + 1}</CardTitle>
+        <Card key={index} className="flex flex-col">
+          <CardHeader className="p-4">
+            <CardTitle className="text-base">List {index + 1}</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0 flex-grow">
             {entries.length > 0 ? (
-              <ul className="space-y-3">
-                {entries.map((entry) => (
-                  <li
-                    key={entry.takaNumber}
-                    className={cn(
-                      "p-3 rounded-md border flex flex-col transition-colors",
-                      deliveredTakaNumbers.has(entry.takaNumber)
-                        ? "border-destructive/50 bg-destructive/10"
-                        : "bg-card"
-                    )}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div className="font-bold text-lg">
-                        Taka: <span className={cn(deliveredTakaNumbers.has(entry.takaNumber) ? 'text-destructive' : 'text-primary')}>{entry.takaNumber}</span>
-                      </div>
-                      {deliveredTakaNumbers.has(entry.takaNumber) && (
-                        <Badge variant="destructive">Delivered</Badge>
-                      )}
-                    </div>
-                    <div className="text-sm text-muted-foreground grid grid-cols-3 gap-2 mt-2">
-                        <div><span className="font-medium">Date:</span> {entry.date}</div>
-                        <div><span className="font-medium">Machine:</span> {entry.machineNumber}</div>
-                        <div><span className="font-medium">Meter:</span> {entry.meter}</div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="p-2 text-[10px] font-bold">Taka</TableHead>
+                    <TableHead className="p-2 text-[10px] font-bold">Machine</TableHead>
+                    <TableHead className="p-2 text-[10px] font-bold">Meter</TableHead>
+                    <TableHead className="p-2 text-[10px] font-bold">Date</TableHead>
+                    <TableHead className="p-2 text-[10px] font-bold text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {entries.map((entry) => (
+                    <TableRow key={entry.takaNumber} className={cn(deliveredTakaNumbers.has(entry.takaNumber) && "bg-destructive/10")}>
+                      <TableCell className="p-2 text-[10px] font-bold relative">
+                        {entry.takaNumber}
+                        {deliveredTakaNumbers.has(entry.takaNumber) && (
+                          <Badge variant="destructive" className="absolute -top-2 -right-2 text-[8px] p-0.5 h-auto">Delivered</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="p-2 text-[10px] font-bold">{entry.machineNumber}</TableCell>
+                      <TableCell className="p-2 text-[10px] font-bold">{entry.meter}</TableCell>
+                      <TableCell className="p-2 text-[10px] font-bold">{entry.date}</TableCell>
+                      <TableCell className="p-2 text-right">
+                        <Button variant="ghost" size="icon" className="h-5 w-5">
+                          <FilePenLine className="h-3 w-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive">
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             ) : (
-              <p className="text-muted-foreground text-sm text-center py-4">
+              <p className="text-muted-foreground text-xs text-center py-4">
                 No entries for this list.
               </p>
             )}
