@@ -38,7 +38,7 @@ export async function extractProductionData(input: ExtractProductionDataInput): 
 const ocrPrompt = ai.definePrompt({
   name: 'ocrPrompt',
   input: {schema: ExtractProductionDataInputSchema},
-  output: {schema: z.string()},
+  output: {schema: z.string().nullable()},
   prompt: `Extract all text from the following image:\n\n{{media url=photoDataUri}}`,
 });
 
@@ -68,7 +68,11 @@ const extractProductionDataFlow = ai.defineFlow(
   },
   async input => {
     const ocrResult = await ocrPrompt(input);
-    const rawText = ocrResult.output!;
+    const rawText = ocrResult.output;
+
+    if (!rawText) {
+      return { entries: [] };
+    }
 
     const assignDatesResult = await assignDatesPrompt({
       rawText,
