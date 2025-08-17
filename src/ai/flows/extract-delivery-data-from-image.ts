@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview Extracts delivery data from an image using an LLM.
@@ -23,6 +24,7 @@ const ExtractDeliveryDataOutputSchema = z.object({
     takaNumber: z.string().describe('The taka number.'),
     machineNumber: z.string().describe('The machine number.'),
     meter: z.string().describe('The meter reading.'),
+    date: z.string().optional().describe('The production date in dd/mm/yy format, if available.'),
 });
 export type ExtractDeliveryDataOutput = z.infer<typeof ExtractDeliveryDataOutputSchema>;
 
@@ -35,12 +37,13 @@ const extractPrompt = ai.definePrompt({
   input: {schema: ExtractDeliveryDataInputSchema},
   output: {schema: ExtractDeliveryDataOutputSchema},
   prompt: `You are an AI assistant that extracts information from an image of a handwritten slip.
-The image contains three numbers, each on a new line.
+The image contains up to four numbers, each on a new line.
 1. The first number is the Taka Number.
 2. The second number is the Machine Number.
 3. The third number is the Meter reading.
+4. There might be a date present.
 
-Extract these three values from the image provided.
+Extract these values from the image provided.
 
 Image:
 {{media url=photoDataUri}}

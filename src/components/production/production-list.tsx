@@ -24,6 +24,15 @@ const filterEntriesByRange = (entries: ProductionEntry[], start?: string, end?: 
   });
 };
 
+const formatShortDate = (dateString: string) => {
+  if (!dateString) return '';
+  const parts = dateString.split('/');
+  if (parts.length >= 2) {
+    return `${parts[0]}/${parts[1]}`;
+  }
+  return dateString;
+};
+
 export function ProductionList() {
   const { state, dispatch } = useAppContext();
   const { settings, productionEntries, deliveryEntries } = state;
@@ -79,7 +88,9 @@ export function ProductionList() {
   }
 
   const renderCellContent = (entry: ProductionEntry, field: keyof ProductionEntry) => {
-    if (editingTaka === entry.takaNumber && editedEntry) {
+    const isEditing = editingTaka === entry.takaNumber && editedEntry;
+    
+    if (isEditing) {
       return (
         <Input
           name={field}
@@ -90,6 +101,11 @@ export function ProductionList() {
         />
       );
     }
+    
+    if (field === 'date') {
+      return formatShortDate(entry.date);
+    }
+    
     return entry[field];
   };
 

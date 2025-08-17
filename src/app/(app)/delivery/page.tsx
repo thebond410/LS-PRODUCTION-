@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useRef } from 'react';
@@ -37,7 +38,33 @@ export default function DeliveryPage() {
     defaultValues: { partyName: '', lotNumber: '', takaNumber: '', machineNumber: '', meter: '' },
   });
 
-  const { setValue } = form;
+  const { setValue, trigger } = form;
+
+  const validateDeliveryData = (data: { takaNumber: string, machineNumber: string, meter: string, date?: string }) => {
+    const productionEntry = productionEntries.find(p => p.takaNumber === data.takaNumber);
+
+    if (!productionEntry) {
+      toast({ variant: 'destructive', title: 'Validation Error', description: `Taka Number not found` });
+      return false;
+    }
+
+    if (productionEntry.machineNumber !== data.machineNumber) {
+      toast({ variant: 'destructive', title: 'Validation Error', description: `Machine number not match` });
+      return false;
+    }
+    
+    if (productionEntry.meter !== data.meter) {
+      toast({ variant: 'destructive', title: 'Validation Error', description: `Meter not match` });
+      return false;
+    }
+
+    const isDelivered = deliveryEntries.some(d => d.takaNumber === data.takaNumber);
+    if (isDelivered) {
+      toast({ variant: 'destructive', title: 'Error', description: `Taka number ${data.takaNumber} has already been delivered.` });
+      return false;
+    }
+    return true;
+  };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -56,7 +83,12 @@ export default function DeliveryPage() {
           setValue('takaNumber', result.takaNumber);
           setValue('machineNumber', result.machineNumber);
           setValue('meter', result.meter);
-          toast({ title: 'Scan Successful', description: 'Data extracted from image.' });
+          
+          const isValid = validateDeliveryData(result);
+          if (isValid) {
+            toast({ title: 'Scan Successful', description: 'Data extracted and validated.' });
+          }
+          
         } else {
           toast({
             variant: "destructive",
@@ -90,26 +122,7 @@ export default function DeliveryPage() {
   };
 
   const onSubmit: SubmitHandler<DeliveryFormData> = (data) => {
-    const productionEntry = productionEntries.find(p => p.takaNumber === data.takaNumber);
-
-    if (!productionEntry) {
-      toast({ variant: 'destructive', title: 'Validation Error', description: `Taka Number not found` });
-      return;
-    }
-
-    if (productionEntry.machineNumber !== data.machineNumber) {
-      toast({ variant: 'destructive', title: 'Validation Error', description: `Machine number not match` });
-      return;
-    }
-    
-    if (productionEntry.meter !== data.meter) {
-      toast({ variant: 'destructive', title: 'Validation Error', description: `Meter not mach` });
-      return;
-    }
-
-    const isDelivered = deliveryEntries.some(d => d.takaNumber === data.takaNumber);
-    if (isDelivered) {
-      toast({ variant: 'destructive', title: 'Error', description: `Taka number ${data.takaNumber} has already been delivered.` });
+    if (!validateDeliveryData(data)) {
       return;
     }
 
