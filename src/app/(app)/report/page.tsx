@@ -4,13 +4,13 @@ import { FileText } from "lucide-react";
 
 export default function ReportPage() {
   return (
-    <div className="p-4 space-y-4">
-      <header>
+    <div className="space-y-4">
+      <header className="p-4 pb-0">
         <h1 className="text-2xl font-bold text-gray-800">Reports</h1>
         <p className="text-muted-foreground">Generate and view reports.</p>
       </header>
 
-      <Card>
+      <Card className="mx-4">
         <CardHeader>
           <CardTitle>Filter Options</CardTitle>
         </CardHeader>

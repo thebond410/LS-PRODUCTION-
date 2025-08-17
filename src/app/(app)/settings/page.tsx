@@ -73,14 +73,14 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="p-4 space-y-4">
-      <header>
+    <div className="space-y-4">
+      <header className="p-4 pb-0">
         <h1 className="text-2xl font-bold text-gray-800">Settings</h1>
         <p className="text-muted-foreground">Configure your application.</p>
       </header>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 p-4 pt-0">
           <Card>
             <CardHeader>
               <CardTitle>Production List</CardTitle>

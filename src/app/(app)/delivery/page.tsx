@@ -59,13 +59,13 @@ export default function DeliveryPage() {
   };
 
   return (
-    <div className="p-4 space-y-4">
-      <header>
+    <div className="space-y-4">
+      <header className="p-4 pb-0">
         <h1 className="text-2xl font-bold text-gray-800">Delivery</h1>
         <p className="text-muted-foreground">Record new deliveries.</p>
       </header>
 
-      <Card>
+      <Card className="mx-4">
         <CardHeader>
           <CardTitle>New Delivery Entry</CardTitle>
         </CardHeader>
@@ -108,7 +108,7 @@ export default function DeliveryPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="mx-4">
         <CardHeader>
           <CardTitle>Recent Deliveries</CardTitle>
         </CardHeader>

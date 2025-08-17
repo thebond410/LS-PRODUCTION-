@@ -20,13 +20,13 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="p-4 space-y-4">
-      <header>
+    <div className="space-y-4">
+      <header className="p-4 pb-0">
         <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
         <p className="text-muted-foreground">Overview of your production status.</p>
       </header>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-4 p-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Production</CardTitle>
@@ -59,7 +59,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <Card>
+      <Card className="mx-4">
         <CardHeader>
           <CardTitle>Production vs Delivery</CardTitle>
         </CardHeader>

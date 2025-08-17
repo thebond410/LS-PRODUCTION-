@@ -3,8 +3,8 @@ import { ProductionList } from "@/components/production/production-list";
 
 export default function ProductionPage() {
   return (
-    <div className="p-4 space-y-4">
-      <header className="flex justify-between items-center">
+    <div className="space-y-4">
+      <header className="flex justify-between items-center px-4 pt-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Production</h1>
           <p className="text-muted-foreground">Manage your production entries.</p>

@@ -45,10 +45,10 @@ export function ProductionList() {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[2px] px-[2px]">
       {tableData.map((entries, index) => (
         <Card key={index} className="flex flex-col">
-          <CardHeader className="p-4">
+          <CardHeader className="p-2">
             <CardTitle className="text-base">List {index + 1}</CardTitle>
           </CardHeader>
           <CardContent className="p-0 flex-grow">
@@ -56,26 +56,26 @@ export function ProductionList() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="p-2 text-[10px] font-bold">Taka</TableHead>
-                    <TableHead className="p-2 text-[10px] font-bold">Machine</TableHead>
-                    <TableHead className="p-2 text-[10px] font-bold">Meter</TableHead>
-                    <TableHead className="p-2 text-[10px] font-bold">Date</TableHead>
-                    <TableHead className="p-2 text-[10px] font-bold text-right">Actions</TableHead>
+                    <TableHead className="p-[2px] text-[10px] font-bold">Taka</TableHead>
+                    <TableHead className="p-[2px] text-[10px] font-bold">M/C</TableHead>
+                    <TableHead className="p-[2px] text-[10px] font-bold">Meter</TableHead>
+                    <TableHead className="p-[2px] text-[10px] font-bold">DT</TableHead>
+                    <TableHead className="p-[2px] text-[10px] font-bold text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {entries.map((entry) => (
-                    <TableRow key={entry.takaNumber} className={cn(deliveredTakaNumbers.has(entry.takaNumber) && "bg-destructive/10")}>
-                      <TableCell className="p-2 text-[10px] font-bold relative">
+                    <TableRow key={entry.takaNumber} className={cn("m-[2px]", deliveredTakaNumbers.has(entry.takaNumber) && "bg-destructive/10")}>
+                      <TableCell className="p-[2px] text-[10px] font-bold relative">
                         {entry.takaNumber}
                         {deliveredTakaNumbers.has(entry.takaNumber) && (
                           <Badge variant="destructive" className="absolute -top-2 -right-2 text-[8px] p-0.5 h-auto">Delivered</Badge>
                         )}
                       </TableCell>
-                      <TableCell className="p-2 text-[10px] font-bold">{entry.machineNumber}</TableCell>
-                      <TableCell className="p-2 text-[10px] font-bold">{entry.meter}</TableCell>
-                      <TableCell className="p-2 text-[10px] font-bold">{entry.date}</TableCell>
-                      <TableCell className="p-2 text-right">
+                      <TableCell className="p-[2px] text-[10px] font-bold">{entry.machineNumber}</TableCell>
+                      <TableCell className="p-[2px] text-[10px] font-bold">{entry.meter}</TableCell>
+                      <TableCell className="p-[2px] text-[10px] font-bold">{entry.date}</TableCell>
+                      <TableCell className="p-[2px] text-right">
                         <Button variant="ghost" size="icon" className="h-5 w-5">
                           <FilePenLine className="h-3 w-3" />
                         </Button>
