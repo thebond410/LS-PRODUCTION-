@@ -11,6 +11,7 @@ export type DeliveryEntry = {
   lotNumber: string;
   deliveryDate: string;
   takaNumber: string;
+  meter: string;
 };
 
 export interface Settings {

@@ -73,26 +73,25 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <header className="p-4 pb-0">
-        <h1 className="text-2xl font-bold text-gray-800">Settings</h1>
-        <p className="text-muted-foreground">Configure your application.</p>
+    <div className="space-y-2">
+      <header className="px-2 pt-2">
+        <h1 className="text-xl font-bold text-gray-800">Settings</h1>
+        <p className="text-muted-foreground text-sm">Configure your application.</p>
       </header>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 p-4 pt-0">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-2 px-2">
           <Card>
-            <CardHeader>
-              <CardTitle>Production List</CardTitle>
-              <CardDescription>Configure how production lists are displayed.</CardDescription>
+            <CardHeader className="p-2">
+              <CardTitle className="text-base">Production List</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="p-2 space-y-2">
               <FormField
                 control={form.control}
                 name="productionTables"
                 render={({ field }) => (
-                  <FormItem className="space-y-3">
-                    <FormLabel>Number of Tables</FormLabel>
+                  <FormItem className="space-y-2">
+                    <FormLabel className="text-sm">Number of Tables</FormLabel>
                     <FormControl>
                       <RadioGroup
                         onValueChange={(value) => field.onChange(parseInt(value))}
@@ -104,7 +103,7 @@ export default function SettingsPage() {
                             <FormControl>
                               <RadioGroupItem value={String(num)} />
                             </FormControl>
-                            <FormLabel className="font-normal">{num}</FormLabel>
+                            <FormLabel className="font-normal text-sm">{num}</FormLabel>
                           </FormItem>
                         ))}
                       </RadioGroup>
@@ -115,16 +114,16 @@ export default function SettingsPage() {
               />
               {Array.from({ length: productionTables }).map((_, i) => (
                 <div key={i} className="space-y-2">
-                  <FormLabel>List {i+1} Taka Range</FormLabel>
-                  <div className="grid grid-cols-2 gap-4">
+                  <FormLabel className="text-sm">List {i+1} Taka Range</FormLabel>
+                  <div className="grid grid-cols-2 gap-2">
                     <FormField control={form.control} name={`listTakaRanges.list${i+1}.start`} render={({ field }) => (
                       <FormItem>
-                        <FormControl><Input placeholder="Start No." {...field} /></FormControl>
+                        <FormControl><Input placeholder="Start No." {...field} className="h-8"/></FormControl>
                       </FormItem>
                     )} />
                      <FormField control={form.control} name={`listTakaRanges.list${i+1}.end`} render={({ field }) => (
                       <FormItem>
-                        <FormControl><Input placeholder="End No." {...field} /></FormControl>
+                        <FormControl><Input placeholder="End No." {...field} className="h-8"/></FormControl>
                       </FormItem>
                     )} />
                   </div>
@@ -134,15 +133,14 @@ export default function SettingsPage() {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Scan API</CardTitle>
-              <CardDescription>Enter your API key for scanning.</CardDescription>
+             <CardHeader className="p-2">
+              <CardTitle className="text-base">Scan API</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="p-2 space-y-2">
               <FormField control={form.control} name="scanApiKey" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Scan API Key</FormLabel>
-                  <FormControl><Input type="password" placeholder="Enter your API key" {...field} /></FormControl>
+                  <FormLabel className="text-sm">Scan API Key</FormLabel>
+                  <FormControl><Input type="password" placeholder="Enter your API key" {...field} className="h-8"/></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
@@ -150,30 +148,29 @@ export default function SettingsPage() {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Supabase API</CardTitle>
-              <CardDescription>Enter your Supabase credentials to sync data.</CardDescription>
+            <CardHeader className="p-2">
+              <CardTitle className="text-base">Supabase API</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="p-2 space-y-2">
               <FormField control={form.control} name="supabaseUrl" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Supabase URL</FormLabel>
-                  <FormControl><Input placeholder="https://....supabase.co" {...field} /></FormControl>
+                  <FormLabel className="text-sm">Supabase URL</FormLabel>
+                  <FormControl><Input placeholder="https://....supabase.co" {...field} className="h-8" /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
               <FormField control={form.control} name="supabaseKey" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Supabase Anon Key</FormLabel>
-                  <FormControl><Input type="password" placeholder="ey..." {...field} /></FormControl>
+                  <FormLabel className="text-sm">Supabase Anon Key</FormLabel>
+                  <FormControl><Input type="password" placeholder="ey..." {...field} className="h-8" /></FormControl>
                    <FormMessage />
                 </FormItem>
               )} />
                <Accordion type="single" collapsible>
                 <AccordionItem value="item-1">
-                  <AccordionTrigger>View SQL Schema</AccordionTrigger>
+                  <AccordionTrigger className="text-sm py-2">View SQL Schema</AccordionTrigger>
                   <AccordionContent>
-                    <pre className="bg-muted p-4 rounded-md text-xs overflow-x-auto">
+                    <pre className="bg-muted p-2 rounded-md text-[10px] overflow-x-auto">
                       <code>{sqlScript}</code>
                     </pre>
                   </AccordionContent>
@@ -182,7 +179,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
           
-          <Button type="submit" className="w-full">Save Settings</Button>
+          <Button type="submit" className="w-full h-9">Save Settings</Button>
         </form>
       </Form>
     </div>

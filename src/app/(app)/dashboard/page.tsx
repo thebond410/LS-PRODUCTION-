@@ -20,52 +20,52 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="space-y-4">
-      <header className="p-4 pb-0">
-        <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
-        <p className="text-muted-foreground">Overview of your production status.</p>
+    <div className="space-y-2">
+      <header className="px-2 pt-2">
+        <h1 className="text-xl font-bold text-gray-800">Dashboard</h1>
+        <p className="text-muted-foreground text-sm">Overview of your production status.</p>
       </header>
 
-      <div className="grid grid-cols-2 gap-4 p-4">
+      <div className="grid grid-cols-2 gap-2 px-2">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-2 pb-1">
             <CardTitle className="text-sm font-medium">Total Production</CardTitle>
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-2 pt-0">
             <div className="text-2xl font-bold">{totalProduction}</div>
             <p className="text-xs text-muted-foreground">takas recorded</p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-2 pb-1">
             <CardTitle className="text-sm font-medium">Delivered</CardTitle>
             <Truck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-2 pt-0">
             <div className="text-2xl font-bold">{totalDelivered}</div>
             <p className="text-xs text-muted-foreground">takas shipped</p>
           </CardContent>
         </Card>
         <Card className="col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-2 pb-1">
             <CardTitle className="text-sm font-medium">Pending Delivery</CardTitle>
             <AlertCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-2 pt-0">
             <div className="text-2xl font-bold">{pendingDelivery}</div>
             <p className="text-xs text-muted-foreground">takas waiting for delivery</p>
           </CardContent>
         </Card>
       </div>
 
-      <Card className="mx-4">
-        <CardHeader>
-          <CardTitle>Production vs Delivery</CardTitle>
+      <Card className="mx-2">
+        <CardHeader className="p-2">
+          <CardTitle className="text-base">Production vs Delivery</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-2 pt-0">
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+            <BarChart data={data} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
               <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false}/>
               <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false}/>
               <Tooltip

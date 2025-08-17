@@ -4,19 +4,19 @@ import { FileText } from "lucide-react";
 
 export default function ReportPage() {
   return (
-    <div className="space-y-4">
-      <header className="p-4 pb-0">
-        <h1 className="text-2xl font-bold text-gray-800">Reports</h1>
-        <p className="text-muted-foreground">Generate and view reports.</p>
+    <div className="space-y-2">
+      <header className="px-2 pt-2">
+        <h1 className="text-xl font-bold text-gray-800">Reports</h1>
+        <p className="text-muted-foreground text-sm">Generate and view reports.</p>
       </header>
 
-      <Card className="mx-4">
-        <CardHeader>
-          <CardTitle>Filter Options</CardTitle>
+      <Card className="mx-2">
+        <CardHeader className="p-2">
+          <CardTitle className="text-base">Filter Options</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="p-2 space-y-2">
             <Select>
-              <SelectTrigger>
+              <SelectTrigger className="h-8">
                 <SelectValue placeholder="Filter by Date" />
               </SelectTrigger>
               <SelectContent>
@@ -27,7 +27,7 @@ export default function ReportPage() {
             </Select>
 
             <Select>
-              <SelectTrigger>
+              <SelectTrigger className="h-8">
                 <SelectValue placeholder="Filter by Type" />
               </SelectTrigger>
               <SelectContent>
@@ -37,7 +37,7 @@ export default function ReportPage() {
             </Select>
 
             <Select>
-              <SelectTrigger>
+              <SelectTrigger className="h-8">
                 <SelectValue placeholder="Filter by Table/List" />
               </SelectTrigger>
               <SelectContent>
