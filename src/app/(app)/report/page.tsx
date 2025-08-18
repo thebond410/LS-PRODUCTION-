@@ -24,7 +24,7 @@ export default function ReportPage() {
   
   const [date, setDate] = useState<DateRange | undefined>();
   const [reportType, setReportType] = useState<ReportType>("");
-  const [machineNumber, setMachineNumber] = useState<string>("");
+  const [machineNumber, setMachineNumber] = useState<string>("all");
   const [generatedReport, setGeneratedReport] = useState<{ type: ReportType; data: any[], totalTakas: number, totalMeters: string } | null>(null);
 
   const availableMachineNumbers = useMemo(() => {
@@ -68,7 +68,7 @@ export default function ReportPage() {
       });
     }
 
-    if (machineNumber && reportType !== 'delivery') {
+    if (machineNumber && machineNumber !== 'all' && reportType !== 'delivery') {
       filteredData = filteredData.filter(entry => 'machineNumber' in entry && entry.machineNumber === machineNumber);
     }
     
@@ -102,9 +102,9 @@ export default function ReportPage() {
       <TableFooter>
         <TableRow>
           <TableCell className="font-bold">Total</TableCell>
-          <TableCell className="font-bold">{totalTakas}</TableCell>
           <TableCell></TableCell>
           <TableCell className="font-bold">{totalMeters}</TableCell>
+          <TableCell className="font-bold">{totalTakas}</TableCell>
         </TableRow>
       </TableFooter>
     </Table>
@@ -166,9 +166,9 @@ export default function ReportPage() {
        <TableFooter>
         <TableRow>
           <TableCell className="font-bold">Total</TableCell>
-          <TableCell className="font-bold">{totalTakas}</TableCell>
-           <TableCell></TableCell>
+          <TableCell></TableCell>
           <TableCell className="font-bold">{totalMeters}</TableCell>
+          <TableCell className="font-bold">{totalTakas}</TableCell>
         </TableRow>
       </TableFooter>
     </Table>
@@ -241,7 +241,7 @@ export default function ReportPage() {
                     <SelectValue placeholder="Filter by Machine" />
                 </SelectTrigger>
                 <SelectContent>
-                     <SelectItem value="">All Machines</SelectItem>
+                     <SelectItem value="all">All Machines</SelectItem>
                     {availableMachineNumbers.map(mc => (
                         <SelectItem key={mc} value={mc}>Machine {mc}</SelectItem>
                     ))}
