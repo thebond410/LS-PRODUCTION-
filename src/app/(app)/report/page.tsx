@@ -43,7 +43,8 @@ export default function ReportPage() {
     
     if (date?.from && date?.to) {
        filteredData = filteredData.filter(entry => {
-        const entryDateStr = 'productionDate' in entry ? entry.productionDate : entry.deliveryDate;
+        const entryDateStr = 'date' in entry ? entry.date : entry.deliveryDate;
+        if (!entryDateStr) return false;
         const entryDate = new Date(entryDateStr.split('/').reverse().join('-'));
         return entryDate >= date.from! && entryDate <= date.to!;
       });
@@ -151,7 +152,7 @@ export default function ReportPage() {
                     </PopoverContent>
                 </Popover>
 
-                <Select onValueChange={(value) => setReportType(value as ReportType)} value={reportType}>
+                <Select onValuechange={(value) => setReportType(value as ReportType)} value={reportType}>
                 <SelectTrigger className="h-8">
                     <SelectValue placeholder="Filter by Type" />
                 </SelectTrigger>
