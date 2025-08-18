@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Package, Truck, BarChart, Settings, Wifi, WifiOff, UploadCloud, DownloadCloud, Loader2 } from 'lucide-react';
+import { LayoutDashboard, Package, Truck, BarChart, Settings, Wifi, WifiOff, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient, SupabaseClient, PostgrestError, RealtimeChannel } from '@supabase/supabase-js';
 import { useAppContext } from '@/context/AppContext';
