@@ -37,6 +37,8 @@ type Action =
   | { type: 'UPDATE_PRODUCTION_ENTRY'; payload: ProductionEntry }
   | { type: 'DELETE_PRODUCTION_ENTRY'; payload: string }
   | { type: 'ADD_DELIVERY_ENTRY'; payload: DeliveryEntry }
+  | { type: 'UPDATE_DELIVERY_ENTRY'; payload: DeliveryEntry }
+  | { type: 'DELETE_DELIVERY_ENTRY'; payload: string }
   | { type: 'SET_PRODUCTION_ENTRIES'; payload: ProductionEntry[] }
   | { type: 'SET_DELIVERY_ENTRIES'; payload: DeliveryEntry[] };
 
@@ -68,6 +70,20 @@ const appReducer = (state: AppState, action: Action): AppState => {
       };
     case 'ADD_DELIVERY_ENTRY':
       return { ...state, deliveryEntries: [...state.deliveryEntries, action.payload] };
+    case 'UPDATE_DELIVERY_ENTRY':
+        return {
+          ...state,
+          deliveryEntries: state.deliveryEntries.map((entry) =>
+            entry.id === action.payload.id ? action.payload : entry
+          ),
+        };
+    case 'DELETE_DELIVERY_ENTRY':
+        return {
+          ...state,
+          deliveryEntries: state.deliveryEntries.filter(
+            (entry) => entry.id !== action.payload
+          ),
+        };
     case 'SET_PRODUCTION_ENTRIES':
         return { ...state, productionEntries: action.payload };
     case 'SET_DELIVERY_ENTRIES':

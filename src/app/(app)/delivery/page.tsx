@@ -12,7 +12,7 @@ import { Form, FormControl, FormField, FormItem, FormMessage } from "@/component
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAppContext } from "@/context/AppContext";
 import { useToast } from '@/hooks/use-toast';
-import { Camera, PlusCircle, Loader2 } from 'lucide-react';
+import { Camera, PlusCircle, Loader2, FilePenLine, Trash2, Check, X } from 'lucide-react';
 import { DeliveryEntry } from '@/types';
 import { extractDeliveryData } from '@/ai/flows/extract-delivery-data-from-image';
 
@@ -32,6 +32,10 @@ export default function DeliveryPage() {
   const { toast } = useToast();
   const [isScanning, setIsScanning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editedEntry, setEditedEntry] = useState<DeliveryEntry | null>(null);
+
 
   const form = useForm<DeliveryFormData>({
     resolver: zodResolver(deliverySchema),
@@ -155,6 +159,50 @@ export default function DeliveryPage() {
     addDeliveryEntry(data);
   };
 
+  const handleEditClick = (entry: DeliveryEntry) => {
+    setEditingId(entry.id);
+    setEditedEntry(entry);
+  };
+
+  const handleCancelClick = () => {
+    setEditingId(null);
+    setEditedEntry(null);
+  };
+
+  const handleSaveClick = () => {
+    if (editedEntry) {
+      dispatch({ type: 'UPDATE_DELIVERY_ENTRY', payload: editedEntry });
+      handleCancelClick();
+    }
+  };
+
+  const handleDeleteClick = (id: string) => {
+    if (confirm('Are you sure you want to delete this entry?')) {
+      dispatch({ type: 'DELETE_DELIVERY_ENTRY', payload: id });
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (editedEntry) {
+      setEditedEntry({ ...editedEntry, [e.target.name]: e.target.value });
+    }
+  };
+
+  const renderCellContent = (entry: DeliveryEntry, field: keyof DeliveryEntry) => {
+    if (editingId === entry.id && editedEntry) {
+      return (
+        <Input
+          name={field}
+          value={editedEntry[field]}
+          onChange={handleInputChange}
+          className="h-5 p-1 text-[10px] font-bold"
+          disabled={field === 'id' || field === 'takaNumber'}
+        />
+      );
+    }
+    return entry[field];
+  };
+
   return (
     <div className="space-y-2">
       <header className="px-2 pt-2">
@@ -228,19 +276,45 @@ export default function DeliveryPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="p-1 text-[12px] font-bold h-8">Taka</TableHead>
-                <TableHead className="p-1 text-[12px] font-bold h-8">Party</TableHead>
-                <TableHead className="p-1 text-[12px] font-bold h-8">Meter</TableHead>
                 <TableHead className="p-1 text-[12px] font-bold h-8">Date</TableHead>
+                <TableHead className="p-1 text-[12px] font-bold h-8">Taka</TableHead>
+                <TableHead className="p-1 text-[12px] font-bold h-8">M/C</TableHead>
+                <TableHead className="p-1 text-[12px] font-bold h-8">Meter</TableHead>
+                <TableHead className="p-1 text-[12px] font-bold h-8">Party</TableHead>
+                <TableHead className="p-1 text-[12px] font-bold h-8">Lot</TableHead>
+                <TableHead className="p-1 text-[12px] font-bold h-8 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {[...deliveryEntries].reverse().slice(0, 10).map((entry) => (
+              {[...deliveryEntries].reverse().map((entry) => (
                 <TableRow key={entry.id}>
-                  <TableCell className="p-1 text-[11px] font-bold">{entry.takaNumber}</TableCell>
-                  <TableCell className="p-1 text-[11px] font-bold truncate max-w-[80px]">{entry.partyName}</TableCell>
-                  <TableCell className="p-1 text-[11px] font-bold">{entry.meter}</TableCell>
-                  <TableCell className="p-1 text-[11px] font-bold">{entry.deliveryDate}</TableCell>
+                  <TableCell className="p-1 text-[11px] font-bold truncate max-w-[60px]">{renderCellContent(entry, 'deliveryDate')}</TableCell>
+                  <TableCell className="p-1 text-[11px] font-bold">{renderCellContent(entry, 'takaNumber')}</TableCell>
+                  <TableCell className="p-1 text-[11px] font-bold">{renderCellContent(entry, 'machineNumber')}</TableCell>
+                  <TableCell className="p-1 text-[11px] font-bold">{renderCellContent(entry, 'meter')}</TableCell>
+                  <TableCell className="p-1 text-[11px] font-bold truncate max-w-[80px]">{renderCellContent(entry, 'partyName')}</TableCell>
+                  <TableCell className="p-1 text-[11px] font-bold">{renderCellContent(entry, 'lotNumber')}</TableCell>
+                  <TableCell className="p-1 text-[11px] font-bold text-right">
+                    {editingId === entry.id ? (
+                      <>
+                        <Button variant="ghost" size="icon" className="h-5 w-5 text-green-600" onClick={handleSaveClick}>
+                          <Check className="h-3 w-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive" onClick={handleCancelClick}>
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => handleEditClick(entry)}>
+                          <FilePenLine className="h-3 w-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive" onClick={() => handleDeleteClick(entry.id)}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
