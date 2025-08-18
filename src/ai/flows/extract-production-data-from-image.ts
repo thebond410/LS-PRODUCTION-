@@ -50,7 +50,7 @@ const assignDatesPrompt = ai.definePrompt({
   The data is organized in columns:
   1.  **Taka Number**: (e.g., 2417, 2418). Sometimes, only the last two digits are written (e.g., 19, 20), implying it follows the sequence from the last full number. You need to infer the full taka number. For example, if the last full number was 2418, then 19, 20, 21 should be interpreted as 2419, 2420, 2421.
   2.  **Machine Number**: (e.g., 11, 10, 3, 4, 7, 6).
-  3.  **Meter**: (e.g., 120, 110, 114-50, 104/50, 114-, 114/). Meter values can be written like "104-50" or "104/50". Keep them as they are. However, if a meter value is written like "114-" or "114/", interpret it as just "114".
+  3.  **Meter**: (e.g., 120, 110, 114-50, 104/50, 114-, 114/). Meter values can be written like "104-50", "104/50" or "104.50". You should convert these to "104.50". If a meter value is written like "114-" or "114/", interpret it as just "114".
 
   A **date** (e.g., 15/8/25) is written on the side and applies to all subsequent rows until a new date appears. Your task is to correctly assign the date to each entry.
 

@@ -14,11 +14,11 @@ const navItems = [
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col h-screen w-full bg-background max-w-md mx-auto">
+    <div className="flex flex-col h-screen w-full bg-background md:max-w-none max-w-md mx-auto">
       <main className="flex-1 overflow-y-auto pb-20">
         {children}
       </main>
-      <footer className="fixed bottom-0 left-0 right-0 h-16 bg-card border-t border-border/60 max-w-md mx-auto">
+      <footer className="fixed bottom-0 left-0 right-0 h-16 bg-card border-t border-border/60 md:max-w-none max-w-md mx-auto">
         <nav className="flex items-center justify-around h-full">
           {navItems.map((item) => (
             <NavLink key={item.href} {...item} />
