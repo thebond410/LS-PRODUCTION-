@@ -19,6 +19,7 @@ import { extractDeliveryData, ExtractDeliveryDataOutput } from '@/ai/flows/extra
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ConfirmationModal } from '@/components/delivery/confirmation-modal';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const deliverySchema = z.object({
   partyName: z.string().min(2, "Party name is required"),
@@ -36,10 +37,23 @@ const formatShortDate = (dateString: string) => {
     return `${date.getDate()}/${date.getMonth() + 1}`;
 };
 
+const filterEntriesByRange = (entries: ProductionEntry[], start?: string, end?: string) => {
+  if (!start || !end) return entries;
+  const startNum = parseInt(start, 10);
+  const endNum = parseInt(end, 10);
+  if (isNaN(startNum) || isNaN(endNum)) return entries;
+
+  return entries.filter(entry => {
+    const takaNum = parseInt(entry.takaNumber, 10);
+    return !isNaN(takaNum) && takaNum >= startNum && takaNum <= endNum;
+  });
+};
+
 
 export default function DeliveryPage() {
   const { state, dispatch } = useAppContext();
-  const { productionEntries, deliveryEntries } = state;
+  const { settings, productionEntries, deliveryEntries } = state;
+  const { productionTables, listTakaRanges } = settings;
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -55,6 +69,8 @@ export default function DeliveryPage() {
   
   const [extractedData, setExtractedData] = useState<ExtractDeliveryDataOutput['entries'] | null>(null);
   const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
+  
+  const [selectedList, setSelectedList] = useState<string>("all");
 
   const form = useForm<DeliveryFormData>({
     resolver: zodResolver(deliverySchema),
@@ -176,11 +192,17 @@ export default function DeliveryPage() {
     };
 
     dispatch({ type: 'ADD_DELIVERY_ENTRY', payload: newDeliveryEntry });
-    // toast({ title: 'Success', description: `Taka ${data.takaNumber} marked as delivered.` });
   };
 
   const validateDeliveryData = (entry: { takaNumber: string, meter: string }): { valid: boolean, error?: string, machineNumber?: string } => {
-    const productionEntry = productionEntries.find(p => p.takaNumber === entry.takaNumber);
+    let sourceEntries = productionEntries;
+    if (selectedList !== "all") {
+        const listKey = selectedList as keyof typeof listTakaRanges;
+        const range = listTakaRanges[listKey];
+        sourceEntries = filterEntriesByRange(productionEntries, range.start, range.end);
+    }
+
+    const productionEntry = sourceEntries.find(p => p.takaNumber === entry.takaNumber);
 
     if (!productionEntry) {
       return { valid: false, error: `Taka Number ${entry.takaNumber} not found` };
@@ -210,7 +232,6 @@ export default function DeliveryPage() {
       for (const entry of confirmedEntries) {
         const { valid, error, machineNumber } = validateDeliveryData(entry);
         if (!valid || !machineNumber) {
-          // This should ideally not happen as we validate before showing confirmation
           toast({ variant: 'destructive', title: 'Validation Error', description: error });
           return;
         }
@@ -306,9 +327,24 @@ export default function DeliveryPage() {
 
   return (
     <div className="space-y-2">
-      <header className="px-2 pt-2">
-        <h1 className="text-xl font-bold text-gray-800">Delivery</h1>
-        <p className="text-muted-foreground text-sm">Record new deliveries.</p>
+       <header className="px-2 pt-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+            <h1 className="text-base font-bold text-gray-800">Delivery</h1>
+            <p className="text-muted-foreground text-sm hidden md:block">Record new deliveries.</p>
+        </div>
+        <div className="w-32">
+            <Select value={selectedList} onValueChange={setSelectedList}>
+              <SelectTrigger className="h-8">
+                <SelectValue placeholder="Select List" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Lists</SelectItem>
+                 {Array.from({ length: productionTables }).map((_, i) => (
+                  <SelectItem key={i} value={`list${i + 1}`}>List {i + 1}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+        </div>
       </header>
 
       <Card className="mx-2">
@@ -470,3 +506,5 @@ export default function DeliveryPage() {
     </div>
   );
 }
+
+    
