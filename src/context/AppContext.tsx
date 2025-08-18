@@ -109,7 +109,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
                 ...state.unsyncedChanges,
                 production: {
                     ...state.unsyncedChanges.production,
-                    add: [...state.unsyncedChanges.production.add, ...newEntries]
+                    add: [...state.unsyncedChanges.production.add.filter(a => !newEntries.some(ne => ne.takaNumber === a.takaNumber)), ...newEntries]
                 }
             }
         };
@@ -125,6 +125,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
             ...state.unsyncedChanges,
             production: {
                 ...state.unsyncedChanges.production,
+                add: state.unsyncedChanges.production.add.filter(p => p.takaNumber !== action.payload.takaNumber),
                 update: [...state.unsyncedChanges.production.update.filter(u => u.takaNumber !== action.payload.takaNumber), action.payload]
             }
         }
@@ -145,7 +146,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
                 ...state.unsyncedChanges.production,
                 add: state.unsyncedChanges.production.add.filter(p => p.takaNumber !== action.payload),
                 update: state.unsyncedChanges.production.update.filter(p => p.takaNumber !== action.payload),
-                delete: [...state.unsyncedChanges.production.delete, action.payload]
+                delete: [...state.unsyncedChanges.production.delete.filter(d => d !== action.payload), action.payload]
             },
             delivery: {
                 ...state.unsyncedChanges.delivery,
@@ -163,7 +164,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
                 ...state.unsyncedChanges,
                 delivery: {
                     ...state.unsyncedChanges.delivery,
-                    add: [...state.unsyncedChanges.delivery.add, action.payload]
+                    add: [...state.unsyncedChanges.delivery.add.filter(a => a.id !== action.payload.id), action.payload]
                 }
             }
         };
@@ -181,7 +182,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
                 ...state.unsyncedChanges,
                 delivery: {
                     ...state.unsyncedChanges.delivery,
-                    add: [...state.unsyncedChanges.delivery.add, ...newDeliveryEntries]
+                    add: [...state.unsyncedChanges.delivery.add.filter(a => !newDeliveryEntries.some(nde => nde.id === a.id)), ...newDeliveryEntries]
                 }
             }
         };
@@ -197,6 +198,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
               ...state.unsyncedChanges,
               delivery: {
                   ...state.unsyncedChanges.delivery,
+                  add: state.unsyncedChanges.delivery.add.filter(d => d.id !== action.payload.id),
                   update: [...state.unsyncedChanges.delivery.update.filter(u => u.id !== action.payload.id), action.payload]
               }
           }
@@ -214,7 +216,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
                 ...state.unsyncedChanges.delivery,
                 add: state.unsyncedChanges.delivery.add.filter(d => d.id !== action.payload),
                 update: state.unsyncedChanges.delivery.update.filter(d => d.id !== action.payload),
-                delete: [...state.unsyncedChanges.delivery.delete, action.payload]
+                delete: [...state.unsyncedChanges.delivery.delete.filter(d => d !== action.payload), action.payload]
             }
           }
         };
@@ -294,3 +296,5 @@ export const useAppContext = () => {
   }
   return context;
 };
+
+    

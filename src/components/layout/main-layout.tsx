@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
@@ -23,7 +24,7 @@ const navItems = [
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { state, dispatch } = useAppContext();
-  const { settings, isInitialized, productionEntries, deliveryEntries, unsyncedChanges } = state;
+  const { settings, isInitialized, unsyncedChanges } = state;
   const { toast } = useToast();
   
   const [isOnline, setIsOnline] = useState(true);
@@ -39,42 +40,46 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     if (settings.supabaseUrl && settings.supabaseKey) {
         const client = createClient(settings.supabaseUrl, settings.supabaseKey);
         setSupabase(client);
+    } else {
+        setSupabase(null);
     }
   }, [settings.supabaseUrl, settings.supabaseKey]);
 
   const handleSync = async () => {
     if (!supabase || !isOnline || isSyncing) {
-        if (!isSyncing) {
-            toast({ variant: 'destructive', title: 'Cannot Sync', description: 'Not connected or already syncing.' });
+        if (!isSyncing && !supabase) {
+            toast({ variant: 'destructive', title: 'Cannot Sync', description: 'Supabase is not configured.' });
         }
         return;
     }
 
     setIsSyncing(true);
     try {
-        if (unsyncedChanges.production.add.length > 0) {
-            const { error } = await supabase.from('production_entries').upsert(unsyncedChanges.production.add);
+        const { production, delivery } = unsyncedChanges;
+
+        if (production.add.length > 0) {
+            const { error } = await supabase.from('production_entries').upsert(production.add.map(({id, ...rest}) => rest)); // Don't send local-only id
             if (error) throw new Error(`Production Add: ${error.message}`);
         }
-        if (unsyncedChanges.production.update.length > 0) {
-            const { error } = await supabase.from('production_entries').upsert(unsyncedChanges.production.update);
+        if (production.update.length > 0) {
+            const { error } = await supabase.from('production_entries').upsert(production.update);
             if (error) throw new Error(`Production Update: ${error.message}`);
         }
-        if (unsyncedChanges.production.delete.length > 0) {
-            const { error } = await supabase.from('production_entries').delete().in('takaNumber', unsyncedChanges.production.delete);
+        if (production.delete.length > 0) {
+            const { error } = await supabase.from('production_entries').delete().in('takaNumber', production.delete);
             if (error) throw new Error(`Production Delete: ${error.message}`);
         }
 
-        if (unsyncedChanges.delivery.add.length > 0) {
-            const { error } = await supabase.from('delivery_entries').upsert(unsyncedChanges.delivery.add);
+        if (delivery.add.length > 0) {
+            const { error } = await supabase.from('delivery_entries').upsert(delivery.add);
             if (error) throw new Error(`Delivery Add: ${error.message}`);
         }
-        if (unsyncedChanges.delivery.update.length > 0) {
-            const { error } = await supabase.from('delivery_entries').upsert(unsyncedChanges.delivery.update);
+        if (delivery.update.length > 0) {
+            const { error } = await supabase.from('delivery_entries').upsert(delivery.update);
             if (error) throw new Error(`Delivery Update: ${error.message}`);
         }
-        if (unsyncedChanges.delivery.delete.length > 0) {
-            const { error } = await supabase.from('delivery_entries').delete().in('id', unsyncedChanges.delivery.delete);
+        if (delivery.delete.length > 0) {
+            const { error } = await supabase.from('delivery_entries').delete().in('id', delivery.delete);
             if (error) throw new Error(`Delivery Delete: ${error.message}`);
         }
         
@@ -99,7 +104,12 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
   // Effect for initial data load and setting up real-time subscriptions
   useEffect(() => {
-    if (!isInitialized || !supabase) return;
+    if (!isInitialized || !supabase) {
+        if(isInitialized && (!settings.supabaseUrl || !settings.supabaseKey)) {
+            setIsOnline(false);
+        }
+        return;
+    }
 
     const syncData = async () => {
       setIsSyncing(true);
@@ -117,7 +127,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               title: 'Database Setup Required',
               description: "Tables not found. Please run the SQL script from the Settings page.",
             });
-            setIsOnline(false); // Can't connect if tables don't exist
+            setIsOnline(false);
             return;
           }
           if (settingsError.code !== 'PGRST116') throw settingsError;
@@ -142,7 +152,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         setIsOnline(false);
         const postgrestError = error as PostgrestError;
         console.error('Supabase connection error:', postgrestError.message);
-        toast({ variant: 'destructive', title: 'Sync Failed', description: `Could not connect to Supabase. ${postgrestError.message}` });
+        if (postgrestError.code !== '42P01') { // Don't toast for missing tables, already handled
+          toast({ variant: 'destructive', title: 'Sync Failed', description: `Could not connect to Supabase. ${postgrestError.message}` });
+        }
       } finally {
         setIsSyncing(false);
       }
@@ -190,19 +202,21 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     const connectionInterval = setInterval(async () => {
         try {
             const { error } = await supabase.from('production_entries').select('takaNumber', { count: 'exact', head: true });
-            if (error && error.code === '42P01') {
-                 setIsOnline(false);
-            } else if (error) {
-                setIsOnline(false);
-            }
-            else {
-                if (!isOnline) { // If it was offline and is now online
-                    handleSync(); // Attempt to sync on reconnect
+            
+            if (error) {
+                 if (error.message.includes("Socket closed unexpectedly") || error.message.includes("fetch failed")) {
+                    if (isOnline) setIsOnline(false);
+                 } else if (error.code !== '42P01' && isOnline) { // Don't go offline for missing table
+                    setIsOnline(false);
+                 }
+            } else {
+                if (!isOnline) {
+                    setIsOnline(true);
+                    handleSync();
                 }
-                setIsOnline(true);
             }
         } catch (e) {
-            setIsOnline(false);
+            if (isOnline) setIsOnline(false);
         }
     }, 10000);
 
@@ -215,6 +229,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   }, [isInitialized, supabase]);
 
   const pendingCount = useMemo(() => {
+    if(!unsyncedChanges) return 0;
     return (
         unsyncedChanges.production.add.length +
         unsyncedChanges.production.update.length +
@@ -271,3 +286,5 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
+    
