@@ -1,7 +1,8 @@
 
 "use client";
 
-import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, ReactNode, useRef } from 'react';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { Settings, ProductionEntry, DeliveryEntry } from '@/types';
 
 interface AppState {
@@ -48,7 +49,6 @@ const appReducer = (state: AppState, action: Action): AppState => {
   switch (action.type) {
     case 'INITIALIZE_STATE':
         const initializedState = { ...state, ...action.payload };
-        // Ensure the permanent Supabase keys are always set from defaults on initialization
         initializedState.settings.supabaseUrl = defaultSettings.supabaseUrl;
         initializedState.settings.supabaseKey = defaultSettings.supabaseKey;
         return { ...initializedState, isInitialized: true };
@@ -57,7 +57,6 @@ const appReducer = (state: AppState, action: Action): AppState => {
         ...state, 
         settings: {
           ...action.payload,
-          // Always preserve the hardcoded Supabase credentials
           supabaseUrl: state.settings.supabaseUrl,
           supabaseKey: state.settings.supabaseKey,
         } 
@@ -85,6 +84,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         ),
       };
     case 'ADD_DELIVERY_ENTRY':
+      if (state.deliveryEntries.some(e => e.id === action.payload.id)) return state;
       return { ...state, deliveryEntries: [...state.deliveryEntries, action.payload] };
     case 'ADD_DELIVERY_ENTRIES':
        const newDeliveryEntries = action.payload.filter(
@@ -116,21 +116,33 @@ const appReducer = (state: AppState, action: Action): AppState => {
 
 const AppContext = createContext<{ state: AppState; dispatch: React.Dispatch<Action> } | undefined>(undefined);
 
+const debounce = <F extends (...args: any[]) => any>(func: F, waitFor: number) => {
+    let timeout: NodeJS.Timeout;
+    return (...args: Parameters<F>): void => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func(...args), waitFor);
+    };
+};
+
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(appReducer, initialState);
+  const supabaseRef = useRef<SupabaseClient | null>(null);
 
+  // Initialize Supabase client
+  if (!supabaseRef.current && state.settings.supabaseUrl && state.settings.supabaseKey) {
+    supabaseRef.current = createClient(state.settings.supabaseUrl, state.settings.supabaseKey);
+  }
+
+  // Load initial state from localStorage
   useEffect(() => {
     try {
       const storedState = localStorage.getItem('ls-prod-tracker-state');
       if (storedState) {
         let parsedState = JSON.parse(storedState);
-        // Ensure tpNumber is not undefined if it exists
         if(parsedState.deliveryEntries) {
             parsedState.deliveryEntries = parsedState.deliveryEntries.map((e: DeliveryEntry) => ({...e, tpNumber: e.tpNumber || undefined}))
         }
-        
         const settings = { ...defaultSettings, ...parsedState.settings };
-        
         dispatch({ type: 'INITIALIZE_STATE', payload: { ...initialState, ...parsedState, settings } });
       } else {
         dispatch({ type: 'INITIALIZE_STATE', payload: initialState });
@@ -140,11 +152,29 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       dispatch({ type: 'INITIALIZE_STATE', payload: initialState });
     }
   }, []);
+  
+  // Local state changes to Supabase (debounced)
+  const debouncedSync = useRef(
+      debounce(async (newState: AppState) => {
+          const supabase = supabaseRef.current;
+          if (!supabase) return;
 
+          const { supabaseUrl, supabaseKey, ...settingsToStore } = newState.settings;
+
+          await Promise.all([
+              supabase.from('app_settings').upsert({ id: 1, settings: settingsToStore }, { onConflict: 'id' }),
+              supabase.from('production_entries').upsert(newState.productionEntries, { onConflict: 'takaNumber' }),
+              supabase.from('delivery_entries').upsert(newState.deliveryEntries, { onConflict: 'id' })
+          ]).catch(error => console.error("Debounced sync error:", error));
+
+      }, 2000)
+  ).current;
+
+
+  // Save state to localStorage and trigger debounced sync
   useEffect(() => {
     if (state.isInitialized) {
       try {
-        // Create a copy of settings and remove supabase keys before saving to local storage
         const { supabaseUrl, supabaseKey, ...settingsToStore } = state.settings;
         const stateToStore = { 
           settings: settingsToStore,
@@ -152,11 +182,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           deliveryEntries: state.deliveryEntries
         };
         localStorage.setItem('ls-prod-tracker-state', JSON.stringify(stateToStore));
+
+        // Sync local changes to Supabase
+        debouncedSync(state);
+
       } catch (error) {
         console.error("Failed to save state to localStorage", error);
       }
     }
-  }, [state]);
+  }, [state, debouncedSync]);
 
   return (
     <AppContext.Provider value={{ state, dispatch }}>

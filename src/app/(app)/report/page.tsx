@@ -1,14 +1,14 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { DateRange } from "react-day-picker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAppContext } from "@/context/AppContext";
 import { ProductionEntry, DeliveryEntry } from "@/types";
@@ -16,7 +16,7 @@ import { Calendar as CalendarIcon, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
-type ReportType = "production" | "delivery" | "";
+type ReportType = "production" | "delivery" | "stock" | "";
 
 export default function ReportPage() {
   const { state } = useAppContext();
@@ -24,8 +24,14 @@ export default function ReportPage() {
   
   const [date, setDate] = useState<DateRange | undefined>();
   const [reportType, setReportType] = useState<ReportType>("");
-  const [list, setList] = useState<string>("");
-  const [generatedReport, setGeneratedReport] = useState<{ type: ReportType; data: any[] } | null>(null);
+  const [machineNumber, setMachineNumber] = useState<string>("");
+  const [generatedReport, setGeneratedReport] = useState<{ type: ReportType; data: any[], totalTakas: number, totalMeters: string } | null>(null);
+
+  const availableMachineNumbers = useMemo(() => {
+    const numbers = new Set(productionEntries.map(e => e.machineNumber));
+    return Array.from(numbers).sort((a,b) => parseInt(a) - parseInt(b));
+  }, [productionEntries]);
+
 
   const handleGenerateReport = () => {
     if (!reportType) {
@@ -34,23 +40,25 @@ export default function ReportPage() {
     }
 
     let filteredData: (ProductionEntry | DeliveryEntry)[] = [];
+    const deliveredTakaNumbers = new Set(deliveryEntries.map(d => d.takaNumber));
 
     if (reportType === 'production') {
       filteredData = productionEntries;
     } else if (reportType === 'delivery') {
       filteredData = deliveryEntries;
+    } else if (reportType === 'stock') {
+      filteredData = productionEntries.filter(p => !deliveredTakaNumbers.has(p.takaNumber));
     }
     
     if (date?.from && date?.to) {
        filteredData = filteredData.filter(entry => {
         const entryDateStr = 'date' in entry ? entry.date : entry.deliveryDate;
         if (!entryDateStr) return false;
-        // Adjusting for dd/mm/yy format to avoid parsing issues
+        
         const dateParts = entryDateStr.split('/');
         if (dateParts.length !== 3) return false;
         const entryDate = new Date(`20${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`);
         
-        // Clear time part for accurate date comparison
         const fromDate = new Date(date.from!);
         fromDate.setHours(0,0,0,0);
         const toDate = new Date(date.to!);
@@ -60,17 +68,25 @@ export default function ReportPage() {
       });
     }
 
-    setGeneratedReport({ type: reportType, data: filteredData });
+    if (machineNumber && reportType !== 'delivery') {
+      filteredData = filteredData.filter(entry => 'machineNumber' in entry && entry.machineNumber === machineNumber);
+    }
+    
+    const totalTakas = filteredData.length;
+    const totalMeters = filteredData.reduce((sum, entry) => sum + (parseFloat(entry.meter) || 0), 0).toFixed(2);
+
+
+    setGeneratedReport({ type: reportType, data: filteredData, totalTakas, totalMeters });
   };
 
-  const renderProductionReport = (data: ProductionEntry[]) => (
+  const renderProductionReport = (data: ProductionEntry[], totalTakas: number, totalMeters: string) => (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Taka No.</TableHead>
-          <TableHead>Machine</TableHead>
-          <TableHead>Meter</TableHead>
-          <TableHead>Date</TableHead>
+          <TableHead className="font-bold text-sky-600">Taka No.</TableHead>
+          <TableHead className="font-bold text-red-600">Machine</TableHead>
+          <TableHead className="font-bold text-green-600">Meter</TableHead>
+          <TableHead className="font-bold text-purple-600">Date</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -83,18 +99,26 @@ export default function ReportPage() {
           </TableRow>
         ))}
       </TableBody>
+      <TableFooter>
+        <TableRow>
+          <TableCell className="font-bold">Total</TableCell>
+          <TableCell className="font-bold">{totalTakas}</TableCell>
+          <TableCell></TableCell>
+          <TableCell className="font-bold">{totalMeters}</TableCell>
+        </TableRow>
+      </TableFooter>
     </Table>
   );
 
-  const renderDeliveryReport = (data: DeliveryEntry[]) => (
+  const renderDeliveryReport = (data: DeliveryEntry[], totalTakas: number, totalMeters: string) => (
      <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Date</TableHead>
-          <TableHead>Taka No.</TableHead>
-          <TableHead>Meter</TableHead>
-          <TableHead>Party</TableHead>
-          <TableHead>Lot</TableHead>
+          <TableHead className="font-bold text-purple-600">Date</TableHead>
+          <TableHead className="font-bold text-sky-600">Taka No.</TableHead>
+          <TableHead className="font-bold text-green-600">Meter</TableHead>
+          <TableHead className="font-bold text-blue-600">Party</TableHead>
+          <TableHead className="font-bold text-orange-600">Lot</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -108,6 +132,45 @@ export default function ReportPage() {
           </TableRow>
         ))}
       </TableBody>
+       <TableFooter>
+        <TableRow>
+          <TableCell className="font-bold">Total</TableCell>
+          <TableCell className="font-bold">{totalTakas}</TableCell>
+          <TableCell className="font-bold">{totalMeters}</TableCell>
+          <TableCell colSpan={2}></TableCell>
+        </TableRow>
+      </TableFooter>
+    </Table>
+  );
+
+  const renderStockReport = (data: ProductionEntry[], totalTakas: number, totalMeters: string) => (
+     <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead className="font-bold text-sky-600">Taka No.</TableHead>
+          <TableHead className="font-bold text-red-600">Machine</TableHead>
+          <TableHead className="font-bold text-green-600">Meter</TableHead>
+          <TableHead className="font-bold text-purple-600">Date</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {data.map((entry, index) => (
+          <TableRow key={index}>
+            <TableCell>{entry.takaNumber}</TableCell>
+            <TableCell>{entry.machineNumber}</TableCell>
+            <TableCell>{entry.meter}</TableCell>
+            <TableCell>{entry.date}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+       <TableFooter>
+        <TableRow>
+          <TableCell className="font-bold">Total</TableCell>
+          <TableCell className="font-bold">{totalTakas}</TableCell>
+           <TableCell></TableCell>
+          <TableCell className="font-bold">{totalMeters}</TableCell>
+        </TableRow>
+      </TableFooter>
     </Table>
   );
 
@@ -169,17 +232,19 @@ export default function ReportPage() {
                 <SelectContent>
                     <SelectItem value="production">Production Wise</SelectItem>
                     <SelectItem value="delivery">Delivery Wise</SelectItem>
+                    <SelectItem value="stock">Stock Wise</SelectItem>
                 </SelectContent>
                 </Select>
 
-                <Select onValueChange={setList} value={list}>
+                <Select onValueChange={setMachineNumber} value={machineNumber} disabled={reportType === 'delivery'}>
                 <SelectTrigger className="h-8">
-                    <SelectValue placeholder="Filter by List" />
+                    <SelectValue placeholder="Filter by Machine" />
                 </SelectTrigger>
                 <SelectContent>
-                    <SelectItem value="list1">List 1</SelectItem>
-                    <SelectItem value="list2">List 2</SelectItem>
-                    <SelectItem value="list3">List 3</SelectItem>
+                     <SelectItem value="">All Machines</SelectItem>
+                    {availableMachineNumbers.map(mc => (
+                        <SelectItem key={mc} value={mc}>Machine {mc}</SelectItem>
+                    ))}
                 </SelectContent>
                 </Select>
             </div>
@@ -192,8 +257,9 @@ export default function ReportPage() {
            {generatedReport ? (
              generatedReport.data.length > 0 ? (
                 <ScrollArea className="h-[calc(100vh-280px)]">
-                    {generatedReport.type === 'production' && renderProductionReport(generatedReport.data as ProductionEntry[])}
-                    {generatedReport.type === 'delivery' && renderDeliveryReport(generatedReport.data as DeliveryEntry[])}
+                    {generatedReport.type === 'production' && renderProductionReport(generatedReport.data as ProductionEntry[], generatedReport.totalTakas, generatedReport.totalMeters)}
+                    {generatedReport.type === 'delivery' && renderDeliveryReport(generatedReport.data as DeliveryEntry[], generatedReport.totalTakas, generatedReport.totalMeters)}
+                    {generatedReport.type === 'stock' && renderStockReport(generatedReport.data as ProductionEntry[], generatedReport.totalTakas, generatedReport.totalMeters)}
                 </ScrollArea>
              ) : (
                 <div className="text-center text-muted-foreground py-10">

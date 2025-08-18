@@ -16,6 +16,7 @@ import { ScrollArea } from "../ui/scroll-area";
 
 type SortKey = keyof ProductionEntry | '';
 type SortDirection = 'asc' | 'desc';
+type ViewMode = 'stock' | 'all';
 
 const filterEntriesByRange = (entries: ProductionEntry[], start?: string, end?: string) => {
   if (!start || !end) return entries;
@@ -52,6 +53,7 @@ export function ProductionList() {
   const { settings, productionEntries, deliveryEntries } = state;
   const { productionTables, listTakaRanges } = settings;
   const [selectedList, setSelectedList] = useState<string>("all");
+  const [viewMode, setViewMode] = useState<ViewMode>('stock');
 
   const [editingTaka, setEditingTaka] = useState<string | null>(null);
   const [editedEntry, setEditedEntry] = useState<ProductionEntry | null>(null);
@@ -61,10 +63,12 @@ export function ProductionList() {
 
   const deliveredTakaNumbers = useMemo(() => new Set(deliveryEntries.map(d => d.takaNumber)), [deliveryEntries]);
   
-  const stockEntries = useMemo(() => 
-    productionEntries.filter(p => !deliveredTakaNumbers.has(p.takaNumber)),
-    [productionEntries, deliveredTakaNumbers]
-  );
+  const displayedEntries = useMemo(() => {
+    if (viewMode === 'stock') {
+      return productionEntries.filter(p => !deliveredTakaNumbers.has(p.takaNumber));
+    }
+    return productionEntries;
+  }, [productionEntries, deliveredTakaNumbers, viewMode]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -104,8 +108,8 @@ export function ProductionList() {
     }
   };
 
-  const sortedStockEntries = useMemo(() => {
-    let entries = [...stockEntries];
+  const sortedEntries = useMemo(() => {
+    let entries = [...displayedEntries];
     if (sortKey) {
       entries.sort((a, b) => {
         const aValue = a[sortKey];
@@ -132,12 +136,12 @@ export function ProductionList() {
        entries.sort((a,b) => parseFloat(b.takaNumber) - parseFloat(a.takaNumber));
     }
     return entries;
-  }, [stockEntries, sortKey, sortDirection]);
+  }, [displayedEntries, sortKey, sortDirection]);
 
   const allTableData = Array.from({ length: productionTables }, (_, i) => {
     const listKey = `list${i + 1}` as keyof typeof listTakaRanges;
     const range = listTakaRanges[listKey];
-    const entries = filterEntriesByRange(sortedStockEntries, range.start, range.end);
+    const entries = filterEntriesByRange(sortedEntries, range.start, range.end);
     const totalMeters = entries.reduce((sum, entry) => sum + (parseFloat(entry.meter) || 0), 0);
     return {
       title: `List ${i + 1}`,
@@ -197,17 +201,26 @@ export function ProductionList() {
 
   return (
     <div className="space-y-2">
-      <div className="px-2">
+      <div className="px-2 grid grid-cols-2 gap-2">
         <Select value={selectedList} onValueChange={setSelectedList}>
           <SelectTrigger className="h-8">
             <SelectValue placeholder="Select a list" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Lists (Stock)</SelectItem>
+            <SelectItem value="all">All Lists</SelectItem>
             {Array.from({ length: productionTables }).map((_, i) => (
               <SelectItem key={i} value={`list${i + 1}`}>List {i + 1}</SelectItem>
             ))}
           </SelectContent>
+        </Select>
+        <Select value={viewMode} onValueChange={(value) => setViewMode(value as ViewMode)}>
+            <SelectTrigger className="h-8">
+                <SelectValue placeholder="Select View" />
+            </SelectTrigger>
+            <SelectContent>
+                <SelectItem value="stock">Stock Only</SelectItem>
+                <SelectItem value="all">All Production</SelectItem>
+            </SelectContent>
         </Select>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[2px] px-[2px]">
@@ -231,7 +244,7 @@ export function ProductionList() {
                     </TableHeader>
                     <TableBody>
                       {data.entries.map((entry) => (
-                        <TableRow key={entry.takaNumber} className={cn("m-[2px] h-6")}>
+                        <TableRow key={entry.takaNumber} className={cn("m-[2px] h-6", { 'bg-gray-200 text-gray-400': deliveredTakaNumbers.has(entry.takaNumber) })}>
                           <TableCell className="p-[2px] text-[10px] font-bold relative text-sky-600">
                             {renderCellContent(entry, 'takaNumber')}
                           </TableCell>
@@ -275,7 +288,7 @@ export function ProductionList() {
                 </ScrollArea>
               ) : (
                 <p className="text-muted-foreground text-xs text-center py-4">
-                  No entries for this list.
+                  No entries for this list or view.
                 </p>
               )}
             </CardContent>

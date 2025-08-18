@@ -1,14 +1,14 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LayoutDashboard, Package, Truck, BarChart, Settings, Wifi, WifiOff, UploadCloud, DownloadCloud, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { createClient, PostgrestError } from '@supabase/supabase-js';
+import { createClient, SupabaseClient, PostgrestError, RealtimeChannel } from '@supabase/supabase-js';
 import { useAppContext } from '@/context/AppContext';
-import { ProductionEntry, DeliveryEntry } from '@/types';
+import { ProductionEntry, DeliveryEntry, Settings as AppSettings } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
 const navItems = [
@@ -22,49 +22,55 @@ const navItems = [
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { state, dispatch } = useAppContext();
-  const { settings, productionEntries, deliveryEntries, isInitialized } = state;
+  const { settings, isInitialized } = state;
   const { toast } = useToast();
   
   const [isOnline, setIsOnline] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
   
-  const supabase = (settings.supabaseUrl && settings.supabaseKey) 
-    ? createClient(settings.supabaseUrl, settings.supabaseKey)
-    : null;
+  const productionChannelRef = useRef<RealtimeChannel | null>(null);
+  const deliveryChannelRef = useRef<RealtimeChannel | null>(null);
+  const settingsChannelRef = useRef<RealtimeChannel | null>(null);
 
+  // Initialize Supabase client
+  useEffect(() => {
+    if (settings.supabaseUrl && settings.supabaseKey) {
+        const client = createClient(settings.supabaseUrl, settings.supabaseKey);
+        setSupabase(client);
+    }
+  }, [settings.supabaseUrl, settings.supabaseKey]);
+
+
+  // Effect for initial data load and setting up real-time subscriptions
   useEffect(() => {
     if (!isInitialized || !supabase) return;
 
     const syncData = async () => {
       setIsSyncing(true);
       try {
-        // Fetch settings first, as it's a critical part of the app config
         const { data: settingsData, error: settingsError } = await supabase
           .from('app_settings')
           .select('settings')
           .eq('id', 1)
           .single();
-        
-        if (settingsError && settingsError.code !== 'PGRST116') { // PGRST116 is "No rows found"
-             // If the table doesn't exist, it's a setup issue.
-            if (settingsError.code === '42P01') { // 42P01 is undefined_table
-                 toast({
-                    variant: 'destructive',
-                    title: 'Database Setup Required',
-                    description: "Tables not found. Please run the SQL script from the Settings page in your Supabase project."
-                });
-                // Allow app to function in offline mode
-                setIsOnline(false);
-                return; 
-            }
-            throw settingsError;
+
+        if (settingsError) {
+          if (settingsError.code === '42P01') {
+            toast({
+              variant: 'destructive',
+              title: 'Database Setup Required',
+              description: "Tables not found. Please run the SQL script from the Settings page.",
+            });
+            setIsOnline(false); // Can't connect if tables don't exist
+            return;
+          }
+          if (settingsError.code !== 'PGRST116') throw settingsError;
         }
-        
         if (settingsData?.settings) {
-          dispatch({ type: 'UPDATE_SETTINGS', payload: settingsData.settings });
+          dispatch({ type: 'UPDATE_SETTINGS', payload: settingsData.settings as AppSettings });
         }
-        
-        // Fetch production and delivery data
+
         const { data: prodData, error: prodError } = await supabase.from('production_entries').select('*');
         if (prodError) throw prodError;
         dispatch({ type: 'SET_PRODUCTION_ENTRIES', payload: prodData as ProductionEntry[] });
@@ -88,53 +94,55 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     
     syncData();
 
-    const interval = setInterval(async () => {
-        if (!supabase) {
-            setIsOnline(false);
-            return;
+    // --- REAL-TIME SUBSCRIPTIONS ---
+
+    // Production Entries
+    productionChannelRef.current = supabase.channel('production_entries')
+      .on<ProductionEntry>('postgres_changes', { event: '*', schema: 'public', table: 'production_entries' }, (payload) => {
+          if (payload.eventType === 'INSERT') {
+             dispatch({ type: 'ADD_PRODUCTION_ENTRIES', payload: [payload.new as ProductionEntry] });
+          } else if (payload.eventType === 'UPDATE') {
+             dispatch({ type: 'UPDATE_PRODUCTION_ENTRY', payload: payload.new as ProductionEntry });
+          } else if (payload.eventType === 'DELETE') {
+             dispatch({ type: 'DELETE_PRODUCTION_ENTRY', payload: (payload.old as ProductionEntry).takaNumber });
+          }
         }
-        // Check a lightweight table to verify connection
+      ).subscribe();
+
+    // Delivery Entries
+    deliveryChannelRef.current = supabase.channel('delivery_entries')
+      .on<DeliveryEntry>('postgres_changes', { event: '*', schema: 'public', table: 'delivery_entries' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          dispatch({ type: 'ADD_DELIVERY_ENTRY', payload: payload.new as DeliveryEntry });
+        } else if (payload.eventType === 'UPDATE') {
+          dispatch({ type: 'UPDATE_DELIVERY_ENTRY', payload: payload.new as DeliveryEntry });
+        } else if (payload.eventType === 'DELETE') {
+          dispatch({ type: 'DELETE_DELIVERY_ENTRY', payload: (payload.old as DeliveryEntry).id });
+        }
+      }).subscribe();
+    
+    // Settings
+    settingsChannelRef.current = supabase.channel('app_settings')
+        .on<any>('postgres_changes', {event: 'UPDATE', schema: 'public', table: 'app_settings', filter: 'id=eq.1'}, (payload) => {
+            if (payload.new.settings) {
+                dispatch({type: 'UPDATE_SETTINGS', payload: payload.new.settings as AppSettings});
+                toast({title: "Settings Updated", description: "Settings were updated from another device."});
+            }
+        }).subscribe();
+
+
+    const connectionInterval = setInterval(async () => {
         const { error } = await supabase.from('production_entries').select('id', { count: 'exact', head: true });
-        setIsOnline(!error);
+        setIsOnline(!error || (error.code !== '42P01' && error.code !== 'PGRST116'));
     }, 30000);
 
-    return () => clearInterval(interval);
-  }, [isInitialized, settings.supabaseUrl, settings.supabaseKey]);
-
-  const handleSync = async () => {
-    if (!supabase || !isOnline) {
-      toast({ variant: 'destructive', title: 'Cannot Sync', description: 'Not connected to Supabase.' });
-      return;
-    }
-    setIsSyncing(true);
-    try {
-      // Upsert Settings
-      const { settings: currentSettings } = state;
-      // Exclude Supabase keys from the settings object being stored
-      const { supabaseUrl, supabaseKey, ...settingsToStore } = currentSettings;
-      const { error: settingsError } = await supabase.from('app_settings').upsert({ id: 1, settings: settingsToStore }, { onConflict: 'id' });
-      if (settingsError) throw settingsError;
-
-      // Upsert Production Entries
-      // We don't pass the `id` field for new entries, so Supabase can auto-generate it.
-      // For existing entries, we need to pass their id. This logic handles both.
-      const productionToUpsert = productionEntries.map(({ id, ...rest }) => id ? { id, ...rest } : rest);
-      const { error: prodError } = await supabase.from('production_entries').upsert(productionToUpsert, { onConflict: 'taka_number' });
-      if (prodError) throw prodError;
-
-      // Upsert Delivery Entries
-      const { error: delError } = await supabase.from('delivery_entries').upsert(deliveryEntries, { onConflict: 'id' });
-      if (delError) throw delError;
-
-      toast({ title: 'Sync Complete', description: 'All local data has been saved to Supabase.' });
-    } catch (error) {
-      const postgrestError = error as PostgrestError;
-      console.error('Sync error:', postgrestError);
-      toast({ variant: 'destructive', title: 'Sync Error', description: `Failed to save data: ${postgrestError.message}` });
-    } finally {
-      setIsSyncing(false);
-    }
-  };
+    return () => {
+      clearInterval(connectionInterval);
+      if (productionChannelRef.current) supabase.removeChannel(productionChannelRef.current);
+      if (deliveryChannelRef.current) supabase.removeChannel(deliveryChannelRef.current);
+      if (settingsChannelRef.current) supabase.removeChannel(settingsChannelRef.current);
+    };
+  }, [isInitialized, supabase]);
 
 
   return (
@@ -163,17 +171,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 {isSyncing ? (
                     <Loader2 className="h-5 w-5 animate-spin text-primary" title="Syncing..." />
                 ) : (
-                    <button onClick={handleSync} disabled={!isOnline || !supabase}>
-                        {isOnline ? 
-                            <UploadCloud className="h-5 w-5 text-green-500" title="Sync to Supabase" /> : 
-                            <UploadCloud className="h-5 w-5 text-gray-400" title="Cannot Sync (Offline)" />
-                        }
-                    </button>
-                )}
-                {isOnline ? (
-                    <Wifi className="h-5 w-5 text-green-500" title="Supabase Online" />
-                ) : (
-                    <WifiOff className="h-5 w-5 text-destructive" title="Supabase Offline" />
+                    isOnline ? 
+                        <Wifi className="h-5 w-5 text-green-500" title="Supabase Online" /> : 
+                        <WifiOff className="h-5 w-5 text-destructive" title="Supabase Offline" />
                 )}
             </div>
         </nav>
