@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LayoutDashboard, Package, Truck, BarChart, Settings, Wifi, WifiOff, UploadCloud, DownloadCloud, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, PostgrestError } from '@supabase/supabase-js';
 import { useAppContext } from '@/context/AppContext';
 import { ProductionEntry, DeliveryEntry } from '@/types';
 import { useToast } from '@/hooks/use-toast';
@@ -22,7 +22,7 @@ const navItems = [
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { state, dispatch } = useAppContext();
-  const { settings, productionEntries, deliveryEntries } = state;
+  const { settings, productionEntries, deliveryEntries, isInitialized } = state;
   const { toast } = useToast();
   
   const [isOnline, setIsOnline] = useState(true);
@@ -33,19 +33,27 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     : null;
 
   useEffect(() => {
+    if (!isInitialized || !supabase) return;
+
     const syncData = async () => {
-      if (!supabase) {
-        setIsOnline(false);
-        return;
-      }
       setIsSyncing(true);
       try {
-        // Fetch production data
+        const { data: settingsData, error: settingsError } = await supabase
+          .from('app_settings')
+          .select('settings')
+          .eq('id', 1)
+          .single();
+        
+        if (settingsData?.settings && !settingsError) {
+          dispatch({ type: 'UPDATE_SETTINGS', payload: settingsData.settings });
+        } else if(settingsError && settingsError.code !== 'PGRST116') { // Ignore "no rows found"
+            throw settingsError;
+        }
+
         const { data: prodData, error: prodError } = await supabase.from('production_entries').select('*');
         if (prodError) throw prodError;
         dispatch({ type: 'SET_PRODUCTION_ENTRIES', payload: prodData as ProductionEntry[] });
 
-        // Fetch delivery data
         const { data: delData, error: delError } = await supabase.from('delivery_entries').select('*');
         if (delError) throw delError;
         dispatch({ type: 'SET_DELIVERY_ENTRIES', payload: delData as DeliveryEntry[] });
@@ -54,17 +62,16 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         toast({ title: 'Sync Successful', description: 'Data loaded from Supabase.' });
       } catch (error) {
         setIsOnline(false);
-        console.error('Supabase connection error:', error);
-        toast({ variant: 'destructive', title: 'Sync Failed', description: 'Could not connect to Supabase.' });
+        const postgrestError = error as PostgrestError;
+        console.error('Supabase connection error:', postgrestError.message);
+        toast({ variant: 'destructive', title: 'Sync Failed', description: `Could not connect to Supabase. ${postgrestError.message}` });
       } finally {
         setIsSyncing(false);
       }
     };
     
-    // Run sync on initial load
     syncData();
 
-    // Set up interval to check connection status
     const interval = setInterval(async () => {
         if (!supabase) {
             setIsOnline(false);
@@ -75,7 +82,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [settings.supabaseUrl, settings.supabaseKey]); // Re-run if credentials change
+  }, [isInitialized, settings.supabaseUrl, settings.supabaseKey]);
 
   const handleSync = async () => {
     if (!supabase || !isOnline) {
@@ -84,8 +91,15 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     }
     setIsSyncing(true);
     try {
-      // Upsert Production Entries
-      const { error: prodError } = await supabase.from('production_entries').upsert(productionEntries, { onConflict: 'takaNumber' });
+      // Upsert Settings
+      const { settings: currentSettings } = state;
+      const { supabaseUrl, supabaseKey, ...settingsToStore } = currentSettings;
+      const { error: settingsError } = await supabase.from('app_settings').upsert({ id: 1, settings: settingsToStore }, { onConflict: 'id' });
+      if (settingsError) throw settingsError;
+
+      // Upsert Production Entries, excluding the 'id' field to let the DB generate it.
+      const productionToUpsert = productionEntries.map(({ id, ...rest }) => rest);
+      const { error: prodError } = await supabase.from('production_entries').upsert(productionToUpsert, { onConflict: 'taka_number' });
       if (prodError) throw prodError;
 
       // Upsert Delivery Entries
@@ -94,8 +108,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
       toast({ title: 'Sync Complete', description: 'All local data has been saved to Supabase.' });
     } catch (error) {
-      console.error('Sync error:', error);
-      toast({ variant: 'destructive', title: 'Sync Error', description: 'Failed to save data to Supabase.' });
+      const postgrestError = error as PostgrestError;
+      console.error('Sync error:', postgrestError.message);
+      toast({ variant: 'destructive', title: 'Sync Error', description: `Failed to save data to Supabase: ${postgrestError.message}` });
     } finally {
       setIsSyncing(false);
     }
