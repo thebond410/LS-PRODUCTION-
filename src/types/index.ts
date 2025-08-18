@@ -1,4 +1,6 @@
+
 export type ProductionEntry = {
+  id?: number; // Optional: for database use
   takaNumber: string;
   machineNumber: string;
   meter: string;
@@ -6,7 +8,7 @@ export type ProductionEntry = {
 };
 
 export type DeliveryEntry = {
-  id: string;
+  id: string; // Using string to accommodate local-first (ISOString) and db-first (number) IDs
   partyName: string;
   lotNumber: string;
   deliveryDate: string;
@@ -21,6 +23,7 @@ export interface Settings {
   supabaseUrl: string;
   supabaseKey: string;
   productionTables: number;
+  maxMachineNumber: number; // Added this line
   listTakaRanges: {
     list1: { start: string; end: string };
     list2: { start: string; end: string };

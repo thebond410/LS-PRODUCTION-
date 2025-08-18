@@ -1,3 +1,4 @@
+
 "use client";
 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -14,16 +15,39 @@ interface ConfirmationModalProps {
 }
 
 export function ConfirmationModal({ isOpen, onOpenChange, data }: ConfirmationModalProps) {
-  const { dispatch } = useAppContext();
+  const { state, dispatch } = useAppContext();
+  const { settings } = state;
   const { toast } = useToast();
 
   const handleConfirm = () => {
     if (data) {
-      dispatch({ type: 'ADD_PRODUCTION_ENTRIES', payload: data });
-      toast({
-        title: "Success",
-        description: `${data.length} production entries have been added.`,
+      const validEntries: ProductionEntry[] = [];
+      const invalidEntries: string[] = [];
+      
+      data.forEach(entry => {
+        const machineNum = parseInt(entry.machineNumber, 10);
+        if (isNaN(machineNum) || machineNum > settings.maxMachineNumber) {
+          invalidEntries.push(`Taka ${entry.takaNumber} (Machine ${entry.machineNumber})`);
+        } else {
+          validEntries.push(entry);
+        }
       });
+      
+      if (invalidEntries.length > 0) {
+        toast({
+          variant: "destructive",
+          title: "Invalid Machine Number",
+          description: `The following entries have machine numbers exceeding the maximum of ${settings.maxMachineNumber}: ${invalidEntries.join(', ')}`,
+        });
+      }
+
+      if (validEntries.length > 0) {
+        dispatch({ type: 'ADD_PRODUCTION_ENTRIES', payload: validEntries });
+        toast({
+          title: "Success",
+          description: `${validEntries.length} production entries have been added.`,
+        });
+      }
     }
     onOpenChange(false);
   };

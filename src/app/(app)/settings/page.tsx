@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useForm, SubmitHandler } from 'react-hook-form';
@@ -18,6 +19,7 @@ const settingsSchema = z.object({
   supabaseUrl: z.string().url().or(z.literal('')),
   supabaseKey: z.string().or(z.literal('')),
   productionTables: z.coerce.number().min(1).max(3),
+  maxMachineNumber: z.coerce.number().min(1, "Must have at least 1 machine"),
   listTakaRanges: z.object({
     list1: z.object({ start: z.string(), end: z.string() }),
     list2: z.object({ start: z.string(), end: z.string() }),
@@ -27,12 +29,10 @@ const settingsSchema = z.object({
 
 const sqlScript = `-- SQL Schema for LS Production Tracker
 
--- Table to store app settings
-CREATE TABLE settings (
+-- Table to store app settings (as a JSONB object)
+CREATE TABLE app_settings (
   id INT PRIMARY KEY DEFAULT 1, -- Singleton row
-  scan_api_key TEXT,
-  production_tables INT NOT NULL DEFAULT 1,
-  list_taka_ranges JSONB,
+  settings JSONB,
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   CONSTRAINT single_row_check CHECK (id = 1)
 );
@@ -43,23 +43,21 @@ CREATE TABLE production_entries (
   taka_number TEXT NOT NULL UNIQUE,
   machine_number TEXT,
   meter TEXT,
-  production_date DATE,
+  date TEXT, -- Storing as TEXT to match app logic
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Table to store delivery entries
 CREATE TABLE delivery_entries (
-  id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  id TEXT PRIMARY KEY, -- Using the app-generated string ID
   party_name TEXT NOT NULL,
   lot_number TEXT,
+  delivery_date TEXT, -- Storing as TEXT to match app logic
   taka_number TEXT NOT NULL,
-  delivery_date DATE,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  
-  -- Foreign key to link with production_entries
-  CONSTRAINT fk_taka_number
-    FOREIGN KEY(taka_number) 
-    REFERENCES production_entries(taka_number)
+  meter TEXT,
+  machine_number TEXT,
+  tp_number INT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 `;
 
@@ -72,6 +70,7 @@ export default function SettingsPage() {
     defaultValues: {
       ...state.settings,
       scanApiKey: state.settings.scanApiKey || '',
+      maxMachineNumber: state.settings.maxMachineNumber || 12,
     },
   });
   
@@ -93,15 +92,22 @@ export default function SettingsPage() {
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-2 px-2">
           <Card>
             <CardHeader className="p-2">
-              <CardTitle className="text-base">Production List</CardTitle>
+              <CardTitle className="text-base">General Settings</CardTitle>
             </CardHeader>
             <CardContent className="p-2 space-y-2">
+               <FormField control={form.control} name="maxMachineNumber" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm">Number of Machines</FormLabel>
+                  <FormControl><Input type="number" placeholder="e.g., 12" {...field} className="h-8"/></FormControl>
+                   <FormMessage />
+                </FormItem>
+              )} />
               <FormField
                 control={form.control}
                 name="productionTables"
                 render={({ field }) => (
-                  <FormItem className="space-y-2">
-                    <FormLabel className="text-sm">Number of Tables</FormLabel>
+                  <FormItem className="space-y-2 pt-2">
+                    <FormLabel className="text-sm">Number of Production Lists</FormLabel>
                     <FormControl>
                       <RadioGroup
                         onValueChange={(value) => field.onChange(parseInt(value))}
@@ -144,7 +150,7 @@ export default function SettingsPage() {
 
           <Card>
              <CardHeader className="p-2">
-              <CardTitle className="text-base">Scan API</CardTitle>
+              <CardTitle className="text-base">API Keys</CardTitle>
             </CardHeader>
             <CardContent className="p-2 space-y-2">
               <FormField control={form.control} name="scanApiKey" render={({ field }) => (
@@ -154,15 +160,7 @@ export default function SettingsPage() {
                   <FormMessage />
                 </FormItem>
               )} />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="p-2">
-              <CardTitle className="text-base">Supabase API</CardTitle>
-            </CardHeader>
-            <CardContent className="p-2 space-y-2">
-              <FormField control={form.control} name="supabaseUrl" render={({ field }) => (
+               <FormField control={form.control} name="supabaseUrl" render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-sm">Supabase URL</FormLabel>
                   <FormControl><Input placeholder="https://....supabase.co" {...field} className="h-8" readOnly /></FormControl>
@@ -176,6 +174,15 @@ export default function SettingsPage() {
                    <FormMessage />
                 </FormItem>
               )} />
+            </CardContent>
+          </Card>
+          
+           <Card>
+            <CardHeader className="p-2">
+              <CardTitle className="text-base">Database Schema</CardTitle>
+               <CardDescription className="text-xs">Run this SQL in your Supabase editor to set up tables.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-2">
                <Accordion type="single" collapsible>
                 <AccordionItem value="item-1">
                   <AccordionTrigger className="text-sm py-2">View SQL Schema</AccordionTrigger>

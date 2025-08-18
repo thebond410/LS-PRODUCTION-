@@ -16,6 +16,7 @@ const defaultSettings: Settings = {
   supabaseUrl: 'https://uiawblehjeewwwocjvqu.supabase.co',
   supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVpYXdibGVoamVld3d3b2NqdnF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU0ODkyMTksImV4cCI6MjA3MTA2NTIxOX0.xBMe7PBh1RzLXQhraS_tv41VuDZJYzGodruNlh5gLvk',
   productionTables: 1,
+  maxMachineNumber: 12, // Default max machine number
   listTakaRanges: {
     list1: { start: '', end: '' },
     list2: { start: '', end: '' },
@@ -31,7 +32,7 @@ const initialState: AppState = {
 };
 
 type Action =
-  | { type: 'INITIALIZE_STATE'; payload: AppState }
+  | { type: 'INITIALIZE_STATE'; payload: Partial<AppState> }
   | { type: 'UPDATE_SETTINGS'; payload: Settings }
   | { type: 'ADD_PRODUCTION_ENTRIES'; payload: ProductionEntry[] }
   | { type: 'UPDATE_PRODUCTION_ENTRY'; payload: ProductionEntry }
@@ -46,9 +47,8 @@ type Action =
 const appReducer = (state: AppState, action: Action): AppState => {
   switch (action.type) {
     case 'INITIALIZE_STATE':
-      return { ...action.payload, isInitialized: true };
+      return { ...state, ...action.payload, isInitialized: true };
     case 'UPDATE_SETTINGS':
-      // Prevent overwriting permanent supabase credentials
       return { 
         ...state, 
         settings: {
@@ -58,7 +58,6 @@ const appReducer = (state: AppState, action: Action): AppState => {
         } 
       };
     case 'ADD_PRODUCTION_ENTRIES':
-      // Avoid duplicates based on takaNumber
       const newEntries = action.payload.filter(
         (newEntry) => !state.productionEntries.some((existing) => existing.takaNumber === newEntry.takaNumber)
       );
@@ -83,7 +82,10 @@ const appReducer = (state: AppState, action: Action): AppState => {
     case 'ADD_DELIVERY_ENTRY':
       return { ...state, deliveryEntries: [...state.deliveryEntries, action.payload] };
     case 'ADD_DELIVERY_ENTRIES':
-      return { ...state, deliveryEntries: [...state.deliveryEntries, ...action.payload] };
+       const newDeliveryEntries = action.payload.filter(
+        (newEntry) => !state.deliveryEntries.some((existing) => existing.id === newEntry.id)
+      );
+      return { ...state, deliveryEntries: [...state.deliveryEntries, ...newDeliveryEntries] };
     case 'UPDATE_DELIVERY_ENTRY':
         return {
           ...state,
@@ -121,11 +123,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if(parsedState.deliveryEntries) {
             parsedState.deliveryEntries = parsedState.deliveryEntries.map((e: DeliveryEntry) => ({...e, tpNumber: e.tpNumber || undefined}))
         }
-        // Keep permanent settings
-        parsedState.settings.supabaseUrl = defaultSettings.supabaseUrl;
-        parsedState.settings.supabaseKey = defaultSettings.supabaseKey;
+        
+        const settings = { ...defaultSettings, ...parsedState.settings };
 
-        dispatch({ type: 'INITIALIZE_STATE', payload: { ...initialState, ...parsedState } });
+        dispatch({ type: 'INITIALIZE_STATE', payload: { ...initialState, ...parsedState, settings } });
       } else {
         dispatch({ type: 'INITIALIZE_STATE', payload: initialState });
       }
@@ -159,7 +160,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     <AppContext.Provider value={{ state, dispatch }}>
       {state.isInitialized ? children : (
         <div className="flex items-center justify-center h-screen w-full">
-            {/* You can replace this with a proper loading spinner component */}
             <p>Loading...</p>
         </div>
       )}
