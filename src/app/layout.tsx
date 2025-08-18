@@ -11,6 +11,12 @@ export const metadata: Metadata = {
   title: "LS Production Tracker",
   description: "LS Production Tracker PWA",
   manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "LS Production Tracker",
+    // startUpImage: [],
+  },
 };
 
 export const viewport: Viewport = {
