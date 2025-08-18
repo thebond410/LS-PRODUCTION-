@@ -134,8 +134,11 @@ export function ProductionList() {
         }
 
         if (sortKey === 'date') {
-            const dateA = new Date(String(aValue).split('/').reverse().join('-'));
-            const dateB = new Date(String(bValue).split('/').reverse().join('-'));
+            const datePartsA = String(aValue).split('/');
+            const datePartsB = String(bValue).split('/');
+            if (datePartsA.length !== 3 || datePartsB.length !== 3) return 0;
+            const dateA = new Date(`20${datePartsA[2]}-${datePartsA[1]}-${datePartsA[0]}`);
+            const dateB = new Date(`20${datePartsB[2]}-${datePartsB[1]}-${datePartsB[0]}`);
             if(isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
             return (dateA.getTime() - dateB.getTime()) * (sortDirection === 'asc' ? 1 : -1);
         }
@@ -201,6 +204,11 @@ export function ProductionList() {
         return formatMeter(entry.meter);
     }
     
+    if (field === 'date') {
+        const dateParts = entry.date.split('/');
+        if (dateParts.length === 3) return `${dateParts[0]}/${dateParts[1]}`;
+    }
+
     return entry[field];
   };
   
@@ -253,7 +261,8 @@ export function ProductionList() {
                       <TableRow className="h-auto">
                         <SortableHeader sortKeyName="takaNumber" label="Taka" count={data.totalTakas} className="w-[15%]" />
                         <SortableHeader sortKeyName="meter" label="Meter" className="w-[15%]" />
-                        <TableHead className="p-[2px] text-[10px] font-bold h-auto w-[50%]">Party / Lot</TableHead>
+                        <SortableHeader sortKeyName="date" label="Date" className="w-[15%]" />
+                        {viewMode === 'all' && <TableHead className="p-[2px] text-[10px] font-bold h-auto w-[35%]">Party / Lot</TableHead>}
                         <TableHead className="p-[2px] text-[10px] font-bold text-right h-auto w-[20%]">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -267,15 +276,18 @@ export function ProductionList() {
                                 </TooltipTrigger>
                                 <TooltipContent side="bottom" align="start">
                                   <p>M/C: {entry.machineNumber}</p>
-                                  <p>Date: {entry.date}</p>
+                                  <p>P.Date: {entry.date}</p>
                                    {entry.isDelivered && <p>Del. Date: {entry.deliveryDate}</p>}
                                 </TooltipContent>
                             </Tooltip>
                           </TableCell>
                           <TableCell className="p-[2px] text-[10px] font-bold">{renderCellContent(entry, 'meter')}</TableCell>
-                           <TableCell className="p-[2px] text-[10px] font-bold truncate max-w-0">
-                           {entry.isDelivered ? `${entry.partyName} / ${entry.lotNumber}` : '-'}
-                          </TableCell>
+                           <TableCell className="p-[2px] text-[10px] font-bold">{renderCellContent(entry, 'date')}</TableCell>
+                           {viewMode === 'all' && (
+                             <TableCell className="p-[2px] text-[10px] font-bold truncate max-w-0">
+                                {entry.isDelivered ? `${entry.partyName} / ${entry.lotNumber}` : '-'}
+                             </TableCell>
+                           )}
                           <TableCell className="p-[2px] text-right">
                             {editingTaka === entry.takaNumber ? (
                               <>
@@ -321,3 +333,6 @@ export function ProductionList() {
     </TooltipProvider>
   );
 }
+
+
+    
