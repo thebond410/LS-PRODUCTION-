@@ -27,6 +27,16 @@ const settingsSchema = z.object({
 
 const sqlScript = `-- SQL Schema for LS Production Tracker
 
+-- Table to store app settings
+CREATE TABLE settings (
+  id INT PRIMARY KEY DEFAULT 1, -- Singleton row
+  scan_api_key TEXT,
+  production_tables INT NOT NULL DEFAULT 1,
+  list_taka_ranges JSONB,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT single_row_check CHECK (id = 1)
+);
+
 -- Table to store production entries
 CREATE TABLE production_entries (
   id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
@@ -155,14 +165,14 @@ export default function SettingsPage() {
               <FormField control={form.control} name="supabaseUrl" render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-sm">Supabase URL</FormLabel>
-                  <FormControl><Input placeholder="https://....supabase.co" {...field} className="h-8" /></FormControl>
+                  <FormControl><Input placeholder="https://....supabase.co" {...field} className="h-8" readOnly /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
               <FormField control={form.control} name="supabaseKey" render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-sm">Supabase Anon Key</FormLabel>
-                  <FormControl><Input type="password" placeholder="ey..." {...field} className="h-8" /></FormControl>
+                  <FormControl><Input type="password" placeholder="ey..." {...field} className="h-8" readOnly /></FormControl>
                    <FormMessage />
                 </FormItem>
               )} />

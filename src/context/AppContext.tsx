@@ -13,8 +13,8 @@ interface AppState {
 
 const defaultSettings: Settings = {
   scanApiKey: '',
-  supabaseUrl: '',
-  supabaseKey: '',
+  supabaseUrl: 'https://uiawblehjeewwwocjvqu.supabase.co',
+  supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVpYXdibGVoamVld3d3b2NqdnF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU0ODkyMTksImV4cCI6MjA3MTA2NTIxOX0.xBMe7PBh1RzLXQhraS_tv41VuDZJYzGodruNlh5gLvk',
   productionTables: 1,
   listTakaRanges: {
     list1: { start: '', end: '' },
@@ -47,7 +47,15 @@ const appReducer = (state: AppState, action: Action): AppState => {
     case 'INITIALIZE_STATE':
       return { ...action.payload, isInitialized: true };
     case 'UPDATE_SETTINGS':
-      return { ...state, settings: action.payload };
+      // Prevent overwriting permanent supabase credentials
+      return { 
+        ...state, 
+        settings: {
+          ...action.payload,
+          supabaseUrl: state.settings.supabaseUrl,
+          supabaseKey: state.settings.supabaseKey,
+        } 
+      };
     case 'ADD_PRODUCTION_ENTRIES':
       // Avoid duplicates based on takaNumber
       const newEntries = action.payload.filter(
@@ -102,11 +110,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     try {
       const storedState = localStorage.getItem('ls-prod-tracker-state');
       if (storedState) {
-        const parsedState = JSON.parse(storedState);
+        let parsedState = JSON.parse(storedState);
         // Ensure tpNumber is not undefined if it exists
         if(parsedState.deliveryEntries) {
             parsedState.deliveryEntries = parsedState.deliveryEntries.map((e: DeliveryEntry) => ({...e, tpNumber: e.tpNumber || undefined}))
         }
+        // Keep permanent settings
+        parsedState.settings.supabaseUrl = defaultSettings.supabaseUrl;
+        parsedState.settings.supabaseKey = defaultSettings.supabaseKey;
+
         dispatch({ type: 'INITIALIZE_STATE', payload: { ...initialState, ...parsedState } });
       } else {
         dispatch({ type: 'INITIALIZE_STATE', payload: initialState });
@@ -121,7 +133,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (state.isInitialized) {
       try {
         const stateToStore = { 
-          settings: state.settings,
+          settings: {
+            ...state.settings,
+            // Don't store permanent keys in local storage
+            supabaseUrl: '',
+            supabaseKey: '',
+          },
           productionEntries: state.productionEntries,
           deliveryEntries: state.deliveryEntries
         };
