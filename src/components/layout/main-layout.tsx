@@ -38,18 +38,33 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     const syncData = async () => {
       setIsSyncing(true);
       try {
+        // Fetch settings first, as it's a critical part of the app config
         const { data: settingsData, error: settingsError } = await supabase
           .from('app_settings')
           .select('settings')
           .eq('id', 1)
           .single();
         
-        if (settingsData?.settings && !settingsError) {
-          dispatch({ type: 'UPDATE_SETTINGS', payload: settingsData.settings });
-        } else if(settingsError && settingsError.code !== 'PGRST116') { // Ignore "no rows found"
+        if (settingsError && settingsError.code !== 'PGRST116') { // PGRST116 is "No rows found"
+             // If the table doesn't exist, it's a setup issue.
+            if (settingsError.code === '42P01') { // 42P01 is undefined_table
+                 toast({
+                    variant: 'destructive',
+                    title: 'Database Setup Required',
+                    description: "Tables not found. Please run the SQL script from the Settings page in your Supabase project."
+                });
+                // Allow app to function in offline mode
+                setIsOnline(false);
+                return; 
+            }
             throw settingsError;
         }
-
+        
+        if (settingsData?.settings) {
+          dispatch({ type: 'UPDATE_SETTINGS', payload: settingsData.settings });
+        }
+        
+        // Fetch production and delivery data
         const { data: prodData, error: prodError } = await supabase.from('production_entries').select('*');
         if (prodError) throw prodError;
         dispatch({ type: 'SET_PRODUCTION_ENTRIES', payload: prodData as ProductionEntry[] });
@@ -60,6 +75,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
         setIsOnline(true);
         toast({ title: 'Sync Successful', description: 'Data loaded from Supabase.' });
+
       } catch (error) {
         setIsOnline(false);
         const postgrestError = error as PostgrestError;
@@ -77,6 +93,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             setIsOnline(false);
             return;
         }
+        // Check a lightweight table to verify connection
         const { error } = await supabase.from('production_entries').select('id', { count: 'exact', head: true });
         setIsOnline(!error);
     }, 30000);
@@ -93,12 +110,15 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     try {
       // Upsert Settings
       const { settings: currentSettings } = state;
+      // Exclude Supabase keys from the settings object being stored
       const { supabaseUrl, supabaseKey, ...settingsToStore } = currentSettings;
       const { error: settingsError } = await supabase.from('app_settings').upsert({ id: 1, settings: settingsToStore }, { onConflict: 'id' });
       if (settingsError) throw settingsError;
 
-      // Upsert Production Entries, excluding the 'id' field to let the DB generate it.
-      const productionToUpsert = productionEntries.map(({ id, ...rest }) => rest);
+      // Upsert Production Entries
+      // We don't pass the `id` field for new entries, so Supabase can auto-generate it.
+      // For existing entries, we need to pass their id. This logic handles both.
+      const productionToUpsert = productionEntries.map(({ id, ...rest }) => id ? { id, ...rest } : rest);
       const { error: prodError } = await supabase.from('production_entries').upsert(productionToUpsert, { onConflict: 'taka_number' });
       if (prodError) throw prodError;
 
@@ -109,8 +129,8 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       toast({ title: 'Sync Complete', description: 'All local data has been saved to Supabase.' });
     } catch (error) {
       const postgrestError = error as PostgrestError;
-      console.error('Sync error:', postgrestError.message);
-      toast({ variant: 'destructive', title: 'Sync Error', description: `Failed to save data to Supabase: ${postgrestError.message}` });
+      console.error('Sync error:', postgrestError);
+      toast({ variant: 'destructive', title: 'Sync Error', description: `Failed to save data: ${postgrestError.message}` });
     } finally {
       setIsSyncing(false);
     }
