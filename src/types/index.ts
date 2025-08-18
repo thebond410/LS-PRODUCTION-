@@ -13,6 +13,7 @@ export type DeliveryEntry = {
   takaNumber: string;
   meter: string;
   machineNumber: string;
+  tpNumber?: number;
 };
 
 export interface Settings {

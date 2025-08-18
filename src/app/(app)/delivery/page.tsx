@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useAppContext } from "@/context/AppContext";
 import { useToast } from '@/hooks/use-toast';
 import { Camera, PlusCircle, Loader2, FilePenLine, Trash2, Check, X } from 'lucide-react';
-import { DeliveryEntry } from '@/types';
+import { DeliveryEntry, ProductionEntry } from '@/types';
 import { extractDeliveryData } from '@/ai/flows/extract-delivery-data-from-image';
 
 const deliverySchema = z.object({
@@ -42,84 +42,92 @@ export default function DeliveryPage() {
     defaultValues: { partyName: '', lotNumber: '', takaNumber: '', machineNumber: '', meter: '' },
   });
 
-  const { setValue, trigger, watch } = form;
+  const { setValue, trigger, watch, getValues, reset } = form;
   const partyName = watch('partyName');
   const lotNumber = watch('lotNumber');
   const isScanDisabled = !partyName || !lotNumber || isScanning;
 
-  const addDeliveryEntry = (data: DeliveryFormData) => {
+  const addDeliveryEntry = (data: DeliveryFormData, tpNumber?: number) => {
     const newDeliveryEntry: DeliveryEntry = {
-      id: new Date().toISOString(),
+      id: new Date().toISOString() + Math.random(), // Ensure unique ID
       partyName: data.partyName,
       lotNumber: data.lotNumber,
       deliveryDate: new Date().toLocaleDateString('en-GB'), // dd/mm/yyyy
       takaNumber: data.takaNumber,
       meter: data.meter,
-      machineNumber: data.machineNumber
+      machineNumber: data.machineNumber,
+      tpNumber: tpNumber
     };
 
     dispatch({ type: 'ADD_DELIVERY_ENTRY', payload: newDeliveryEntry });
     toast({ title: 'Success', description: `Taka ${data.takaNumber} marked as delivered.` });
-    form.reset({ partyName: data.partyName, lotNumber: data.lotNumber, takaNumber: '', machineNumber: '', meter: '' });
+    reset({ partyName: data.partyName, lotNumber: data.lotNumber, takaNumber: '', machineNumber: '', meter: '' });
   };
 
-  const validateDeliveryData = (data: { takaNumber: string, machineNumber: string, meter: string, date?: string }) => {
-    const productionEntry = productionEntries.find(p => p.takaNumber === data.takaNumber);
+  const validateDeliveryData = (entry: { takaNumber: string, machineNumber: string, meter: string }): { valid: boolean, error?: string } => {
+    const productionEntry = productionEntries.find(p => p.takaNumber === entry.takaNumber);
 
     if (!productionEntry) {
-      toast({ variant: 'destructive', title: 'Validation Error', description: `Taka Number not found` });
-      return false;
+      return { valid: false, error: `Taka Number ${entry.takaNumber} not found` };
     }
-
-    if (productionEntry.machineNumber !== data.machineNumber) {
-      toast({ variant: 'destructive', title: 'Validation Error', description: `Machine number not match` });
-      return false;
+    if (productionEntry.machineNumber !== entry.machineNumber) {
+        return { valid: false, error: `For Taka ${entry.takaNumber}, Machine Number does not match` };
     }
-    
-    if (productionEntry.meter !== data.meter) {
-      toast({ variant: 'destructive', title: 'Validation Error', description: `Meter not match` });
-      return false;
+    if (productionEntry.meter !== entry.meter) {
+        return { valid: false, error: `For Taka ${entry.takaNumber}, Meter does not match` };
     }
-
-    const isDelivered = deliveryEntries.some(d => d.takaNumber === data.takaNumber);
+    const isDelivered = deliveryEntries.some(d => d.takaNumber === entry.takaNumber);
     if (isDelivered) {
-      toast({ variant: 'destructive', title: 'Error', description: `Taka number ${data.takaNumber} has already been delivered.` });
-      return false;
+      return { valid: false, error: `Taka Number ${entry.takaNumber} has already been delivered.` };
     }
-    return true;
+    return { valid: true };
   };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-
+  
     setIsScanning(true);
-
+  
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = async () => {
       try {
         const base64Data = reader.result as string;
         const result = await extractDeliveryData({ photoDataUri: base64Data });
-
-        if (result) {
-          
-          const isValid = validateDeliveryData(result);
-          if (isValid) {
-            setValue('takaNumber', result.takaNumber);
-            setValue('machineNumber', result.machineNumber);
-            setValue('meter', result.meter);
-            toast({ title: 'Scan Successful', description: 'Data extracted and validated.' });
-            // Direct add
-            addDeliveryEntry({
-              partyName: partyName,
-              lotNumber: lotNumber,
-              takaNumber: result.takaNumber,
-              machineNumber: result.machineNumber,
-              meter: result.meter,
-            });
+  
+        if (result && result.entries.length > 0) {
+          let allEntriesValid = true;
+          for (const entry of result.entries) {
+            const { valid, error } = validateDeliveryData(entry);
+            if (!valid) {
+              toast({ variant: 'destructive', title: 'Validation Error', description: error });
+              allEntriesValid = false;
+              break; 
+            }
           }
-          
+  
+          if (allEntriesValid) {
+            const currentPartyName = getValues('partyName');
+            const currentLotNumber = getValues('lotNumber');
+            let tpNumber: number | undefined = undefined;
+
+            if (result.entries.length > 1) {
+              const maxTp = deliveryEntries.reduce((max, entry) => Math.max(max, entry.tpNumber || 0), 0);
+              tpNumber = maxTp + 1;
+            }
+
+            result.entries.forEach(entry => {
+              addDeliveryEntry({
+                partyName: currentPartyName,
+                lotNumber: currentLotNumber,
+                takaNumber: entry.takaNumber,
+                machineNumber: entry.machineNumber,
+                meter: entry.meter,
+              }, tpNumber);
+            });
+            toast({ title: 'Scan Successful', description: `${result.entries.length} entries extracted and added.` });
+          }
         } else {
           toast({
             variant: "destructive",
@@ -136,7 +144,6 @@ export default function DeliveryPage() {
         });
       } finally {
         setIsScanning(false);
-        // Reset the file input
         if(fileInputRef.current) {
           fileInputRef.current.value = '';
         }
@@ -153,7 +160,9 @@ export default function DeliveryPage() {
   };
 
   const onSubmit: SubmitHandler<DeliveryFormData> = (data) => {
-    if (!validateDeliveryData(data)) {
+    const { valid, error } = validateDeliveryData(data);
+    if (!valid) {
+      toast({ variant: 'destructive', title: 'Validation Error', description: error });
       return;
     }
     addDeliveryEntry(data);
@@ -161,7 +170,7 @@ export default function DeliveryPage() {
 
   const handleEditClick = (entry: DeliveryEntry) => {
     setEditingId(entry.id);
-    setEditedEntry(entry);
+    setEditedEntry(JSON.parse(JSON.stringify(entry)));
   };
 
   const handleCancelClick = () => {
@@ -190,17 +199,27 @@ export default function DeliveryPage() {
 
   const renderCellContent = (entry: DeliveryEntry, field: keyof DeliveryEntry) => {
     if (editingId === entry.id && editedEntry) {
+      // Don't render input for 'tpNumber'
+      if (field === 'tpNumber' || field === 'id' || field === 'takaNumber') {
+         // Special handling for tpNumber display
+         if (field === 'takaNumber' && entry.tpNumber) {
+          return <>{entry.takaNumber} <span className="text-red-500 font-bold">TP {entry.tpNumber}</span></>;
+        }
+        return entry[field as keyof typeof entry]?.toString() || '';
+      }
       return (
         <Input
           name={field}
-          value={editedEntry[field]}
+          value={editedEntry[field as keyof typeof editedEntry]?.toString() || ''}
           onChange={handleInputChange}
           className="h-5 p-1 text-[10px] font-bold"
-          disabled={field === 'id' || field === 'takaNumber'}
         />
       );
     }
-    return entry[field];
+    if (field === 'takaNumber' && entry.tpNumber) {
+        return <>{entry.takaNumber} <span className="text-red-500 font-bold">TP {entry.tpNumber}</span></>;
+    }
+    return entry[field as keyof typeof entry]?.toString() || '';
   };
 
   return (

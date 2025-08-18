@@ -103,6 +103,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const storedState = localStorage.getItem('ls-prod-tracker-state');
       if (storedState) {
         const parsedState = JSON.parse(storedState);
+        // Ensure tpNumber is not undefined if it exists
+        if(parsedState.deliveryEntries) {
+            parsedState.deliveryEntries = parsedState.deliveryEntries.map((e: DeliveryEntry) => ({...e, tpNumber: e.tpNumber || undefined}))
+        }
         dispatch({ type: 'INITIALIZE_STATE', payload: { ...initialState, ...parsedState } });
       } else {
         dispatch({ type: 'INITIALIZE_STATE', payload: initialState });

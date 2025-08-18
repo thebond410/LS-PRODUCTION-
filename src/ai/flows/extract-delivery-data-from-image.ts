@@ -1,7 +1,7 @@
 
 'use server';
 /**
- * @fileOverview Extracts delivery data from an image using an LLM.
+ * @fileOverview Extracts single or multiple delivery data entries from an image using an LLM.
  *
  * - extractDeliveryData - A function that handles the extraction of delivery data from an image.
  * - ExtractDeliveryDataInput - The input type for the extractDeliveryData function.
@@ -20,11 +20,14 @@ const ExtractDeliveryDataInputSchema = z.object({
 });
 export type ExtractDeliveryDataInput = z.infer<typeof ExtractDeliveryDataInputSchema>;
 
-const ExtractDeliveryDataOutputSchema = z.object({
+const DeliveryEntrySchema = z.object({
     takaNumber: z.string().describe('The taka number.'),
     machineNumber: z.string().describe('The machine number.'),
     meter: z.string().describe('The meter reading.'),
-    date: z.string().optional().describe('The production date in dd/mm/yy format, if available.'),
+});
+
+const ExtractDeliveryDataOutputSchema = z.object({
+    entries: z.array(DeliveryEntrySchema).describe('An array of delivery entries extracted from the image.'),
 });
 export type ExtractDeliveryDataOutput = z.infer<typeof ExtractDeliveryDataOutputSchema>;
 
@@ -37,13 +40,14 @@ const extractPrompt = ai.definePrompt({
   input: {schema: ExtractDeliveryDataInputSchema},
   output: {schema: ExtractDeliveryDataOutputSchema},
   prompt: `You are an AI assistant that extracts information from an image of a handwritten slip.
-The image contains up to four numbers, each on a new line.
+The image can contain one or more delivery entries. Sometimes multiple entries are written side-by-side, often separated by a '+' sign.
+
+For each entry, you need to extract three numbers, each on a new line or clearly associated.
 1. The first number is the Taka Number.
 2. The second number is the Machine Number.
 3. The third number is the Meter reading. Meter values can be written like "120/" or "120-". You should interpret these as just "120".
-4. There might be a date present.
 
-Extract these values from the image provided.
+Extract all valid entries from the image provided.
 
 Image:
 {{media url=photoDataUri}}
@@ -59,7 +63,7 @@ const extractDeliveryDataFlow = ai.defineFlow(
   async input => {
     const { output } = await extractPrompt(input);
 
-    if (!output) {
+    if (!output || !output.entries || output.entries.length === 0) {
       throw new Error('Could not extract data from the image.');
     }
 
