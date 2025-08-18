@@ -59,7 +59,7 @@ CREATE TABLE delivery_entries (
   machine_number TEXT,
   tp_number INT,
   created_at TIMESTAMPTZ DEFAULT NOW()
-);
+)
 `;
 
 export default function SettingsPage() {
