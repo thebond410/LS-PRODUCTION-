@@ -47,12 +47,17 @@ type Action =
 const appReducer = (state: AppState, action: Action): AppState => {
   switch (action.type) {
     case 'INITIALIZE_STATE':
-      return { ...state, ...action.payload, isInitialized: true };
+        const initializedState = { ...state, ...action.payload };
+        // Ensure the permanent Supabase keys are always set from defaults on initialization
+        initializedState.settings.supabaseUrl = defaultSettings.supabaseUrl;
+        initializedState.settings.supabaseKey = defaultSettings.supabaseKey;
+        return { ...initializedState, isInitialized: true };
     case 'UPDATE_SETTINGS':
       return { 
         ...state, 
         settings: {
           ...action.payload,
+          // Always preserve the hardcoded Supabase credentials
           supabaseUrl: state.settings.supabaseUrl,
           supabaseKey: state.settings.supabaseKey,
         } 
@@ -125,7 +130,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
         
         const settings = { ...defaultSettings, ...parsedState.settings };
-
+        
         dispatch({ type: 'INITIALIZE_STATE', payload: { ...initialState, ...parsedState, settings } });
       } else {
         dispatch({ type: 'INITIALIZE_STATE', payload: initialState });
@@ -139,13 +144,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (state.isInitialized) {
       try {
+        // Create a copy of settings and remove supabase keys before saving to local storage
+        const { supabaseUrl, supabaseKey, ...settingsToStore } = state.settings;
         const stateToStore = { 
-          settings: {
-            ...state.settings,
-            // Don't store permanent keys in local storage
-            supabaseUrl: '',
-            supabaseKey: '',
-          },
+          settings: settingsToStore,
           productionEntries: state.productionEntries,
           deliveryEntries: state.deliveryEntries
         };

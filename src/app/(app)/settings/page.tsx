@@ -13,6 +13,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { useAppContext } from "@/context/AppContext";
 import { useToast } from '@/hooks/use-toast';
 import { Settings as SettingsType } from '@/types';
+import { useEffect } from 'react';
 
 const settingsSchema = z.object({
   scanApiKey: z.string().optional(),
@@ -67,12 +68,15 @@ export default function SettingsPage() {
 
   const form = useForm<SettingsType>({
     resolver: zodResolver(settingsSchema),
-    defaultValues: {
-      ...state.settings,
-      scanApiKey: state.settings.scanApiKey || '',
-      maxMachineNumber: state.settings.maxMachineNumber || 12,
-    },
+    // We use defaultValues to initialize the form with the state
+    defaultValues: state.settings,
   });
+  
+  // Use useEffect to reset the form when the state changes.
+  // This is important because the state might be initialized after the component mounts.
+  useEffect(() => {
+    form.reset(state.settings);
+  }, [state.settings, form.reset]);
   
   const productionTables = form.watch('productionTables');
 
@@ -111,7 +115,7 @@ export default function SettingsPage() {
                     <FormControl>
                       <RadioGroup
                         onValueChange={(value) => field.onChange(parseInt(value))}
-                        defaultValue={String(field.value)}
+                        value={String(field.value)}
                         className="flex space-x-4"
                       >
                         {[1, 2, 3].map(num => (
