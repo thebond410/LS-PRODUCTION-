@@ -45,8 +45,18 @@ export default function ReportPage() {
        filteredData = filteredData.filter(entry => {
         const entryDateStr = 'date' in entry ? entry.date : entry.deliveryDate;
         if (!entryDateStr) return false;
-        const entryDate = new Date(entryDateStr.split('/').reverse().join('-'));
-        return entryDate >= date.from! && entryDate <= date.to!;
+        // Adjusting for dd/mm/yy format to avoid parsing issues
+        const dateParts = entryDateStr.split('/');
+        if (dateParts.length !== 3) return false;
+        const entryDate = new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`);
+        
+        // Clear time part for accurate date comparison
+        const fromDate = new Date(date.from!);
+        fromDate.setHours(0,0,0,0);
+        const toDate = new Date(date.to!);
+        toDate.setHours(23,59,59,999);
+
+        return entryDate >= fromDate && entryDate <= toDate;
       });
     }
 
@@ -152,7 +162,7 @@ export default function ReportPage() {
                     </PopoverContent>
                 </Popover>
 
-                <Select onValuechange={(value) => setReportType(value as ReportType)} value={reportType}>
+                <Select onValueChange={(value) => setReportType(value as ReportType)} value={reportType}>
                 <SelectTrigger className="h-8">
                     <SelectValue placeholder="Filter by Type" />
                 </SelectTrigger>

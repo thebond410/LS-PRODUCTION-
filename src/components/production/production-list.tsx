@@ -34,6 +34,18 @@ const formatShortDate = (dateString: string) => {
   return dateString;
 };
 
+const formatMeter = (meter: string) => {
+    const num = parseFloat(meter);
+    if (isNaN(num)) return meter;
+    // Check if it's a whole number
+    if (num % 1 === 0) {
+        return num.toString();
+    }
+    // Otherwise, format to 2 decimal places
+    return num.toFixed(2);
+};
+
+
 export function ProductionList() {
   const { state, dispatch } = useAppContext();
   const { settings, productionEntries, deliveryEntries } = state;
@@ -63,7 +75,7 @@ export function ProductionList() {
   };
   
   const handleDeleteClick = (takaNumber: string) => {
-    if (confirm(`Are you sure you want to delete Taka ${takaNumber}?`)) {
+    if (window.confirm(`Are you sure you want to delete Taka ${takaNumber}?`)) {
       dispatch({ type: 'DELETE_PRODUCTION_ENTRY', payload: takaNumber });
     }
   }
@@ -113,6 +125,10 @@ export function ProductionList() {
     
     if (field === 'date') {
       return formatShortDate(entry.date);
+    }
+
+    if (field === 'meter') {
+        return formatMeter(entry.meter);
     }
     
     return entry[field];

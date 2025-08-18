@@ -281,7 +281,7 @@ export default function DeliveryPage() {
   };
 
   const handleDeleteClick = (id: string) => {
-    if (confirm('Are you sure you want to delete this entry?')) {
+    if (window.confirm('Are you sure you want to delete this entry?')) {
       dispatch({ type: 'DELETE_DELIVERY_ENTRY', payload: id });
     }
   };
@@ -506,5 +506,3 @@ export default function DeliveryPage() {
     </div>
   );
 }
-
-    
