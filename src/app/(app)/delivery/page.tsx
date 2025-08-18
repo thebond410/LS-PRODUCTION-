@@ -20,7 +20,6 @@ const deliverySchema = z.object({
   partyName: z.string().min(2, "Party name is required"),
   lotNumber: z.string().min(1, "Lot number is required"),
   takaNumber: z.string().min(1, "Taka number is required"),
-  machineNumber: z.string().min(1, "Machine number is required"),
   meter: z.string().min(1, "Meter is required"),
 });
 
@@ -39,7 +38,7 @@ export default function DeliveryPage() {
 
   const form = useForm<DeliveryFormData>({
     resolver: zodResolver(deliverySchema),
-    defaultValues: { partyName: '', lotNumber: '', takaNumber: '', machineNumber: '', meter: '' },
+    defaultValues: { partyName: '', lotNumber: '', takaNumber: '', meter: '' },
   });
 
   const { setValue, trigger, watch, getValues, reset } = form;
@@ -47,7 +46,7 @@ export default function DeliveryPage() {
   const lotNumber = watch('lotNumber');
   const isScanDisabled = !partyName || !lotNumber || isScanning;
 
-  const addDeliveryEntry = (data: DeliveryFormData, tpNumber?: number) => {
+  const addDeliveryEntry = (data: Omit<DeliveryFormData, 'machineNumber'> & { machineNumber: string }, tpNumber?: number) => {
     const newDeliveryEntry: DeliveryEntry = {
       id: new Date().toISOString() + Math.random(), // Ensure unique ID
       partyName: data.partyName,
@@ -61,17 +60,14 @@ export default function DeliveryPage() {
 
     dispatch({ type: 'ADD_DELIVERY_ENTRY', payload: newDeliveryEntry });
     toast({ title: 'Success', description: `Taka ${data.takaNumber} marked as delivered.` });
-    reset({ partyName: data.partyName, lotNumber: data.lotNumber, takaNumber: '', machineNumber: '', meter: '' });
+    reset({ partyName: data.partyName, lotNumber: data.lotNumber, takaNumber: '', meter: '' });
   };
 
-  const validateDeliveryData = (entry: { takaNumber: string, machineNumber: string, meter: string }): { valid: boolean, error?: string } => {
+  const validateDeliveryData = (entry: { takaNumber: string, meter: string }): { valid: boolean, error?: string, machineNumber?: string } => {
     const productionEntry = productionEntries.find(p => p.takaNumber === entry.takaNumber);
 
     if (!productionEntry) {
       return { valid: false, error: `Taka Number ${entry.takaNumber} not found` };
-    }
-    if (productionEntry.machineNumber !== entry.machineNumber) {
-        return { valid: false, error: `For Taka ${entry.takaNumber}, Machine Number does not match` };
     }
     if (productionEntry.meter !== entry.meter) {
         return { valid: false, error: `For Taka ${entry.takaNumber}, Meter does not match` };
@@ -80,7 +76,7 @@ export default function DeliveryPage() {
     if (isDelivered) {
       return { valid: false, error: `Taka Number ${entry.takaNumber} has already been delivered.` };
     }
-    return { valid: true };
+    return { valid: true, machineNumber: productionEntry.machineNumber };
   };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -98,13 +94,16 @@ export default function DeliveryPage() {
   
         if (result && result.entries.length > 0) {
           let allEntriesValid = true;
+          const validatedEntries: (Omit<DeliveryFormData, 'partyName' | 'lotNumber'> & { machineNumber: string })[] = [];
+
           for (const entry of result.entries) {
-            const { valid, error } = validateDeliveryData(entry);
-            if (!valid) {
+            const { valid, error, machineNumber } = validateDeliveryData(entry);
+            if (!valid || !machineNumber) {
               toast({ variant: 'destructive', title: 'Validation Error', description: error });
               allEntriesValid = false;
               break; 
             }
+            validatedEntries.push({ takaNumber: entry.takaNumber, meter: entry.meter, machineNumber });
           }
   
           if (allEntriesValid) {
@@ -112,12 +111,12 @@ export default function DeliveryPage() {
             const currentLotNumber = getValues('lotNumber');
             let tpNumber: number | undefined = undefined;
 
-            if (result.entries.length > 1) {
+            if (validatedEntries.length > 1) {
               const maxTp = deliveryEntries.reduce((max, entry) => Math.max(max, entry.tpNumber || 0), 0);
               tpNumber = maxTp + 1;
             }
 
-            result.entries.forEach(entry => {
+            validatedEntries.forEach(entry => {
               addDeliveryEntry({
                 partyName: currentPartyName,
                 lotNumber: currentLotNumber,
@@ -126,7 +125,7 @@ export default function DeliveryPage() {
                 meter: entry.meter,
               }, tpNumber);
             });
-            toast({ title: 'Scan Successful', description: `${result.entries.length} entries extracted and added.` });
+            toast({ title: 'Scan Successful', description: `${validatedEntries.length} entries extracted and added.` });
           }
         } else {
           toast({
@@ -159,13 +158,13 @@ export default function DeliveryPage() {
     };
   };
 
-  const onSubmit: SubmitHandler<DeliveryFormData> = (data) => {
-    const { valid, error } = validateDeliveryData(data);
-    if (!valid) {
+  const onSubmit: SubmitHandler<Omit<DeliveryFormData, 'machineNumber'>> = (data) => {
+    const { valid, error, machineNumber } = validateDeliveryData(data);
+    if (!valid || !machineNumber) {
       toast({ variant: 'destructive', title: 'Validation Error', description: error });
       return;
     }
-    addDeliveryEntry(data);
+    addDeliveryEntry({ ...data, machineNumber });
   };
 
   const handleEditClick = (entry: DeliveryEntry) => {
@@ -200,7 +199,7 @@ export default function DeliveryPage() {
   const renderCellContent = (entry: DeliveryEntry, field: keyof DeliveryEntry) => {
     if (editingId === entry.id && editedEntry) {
       // Don't render input for 'tpNumber'
-      if (field === 'tpNumber' || field === 'id' || field === 'takaNumber') {
+      if (field === 'tpNumber' || field === 'id' || field === 'takaNumber' || field === 'deliveryDate') {
          // Special handling for tpNumber display
          if (field === 'takaNumber' && entry.tpNumber) {
           return <>{entry.takaNumber} <span className="text-red-500 font-bold">TP {entry.tpNumber}</span></>;
@@ -258,16 +257,10 @@ export default function DeliveryPage() {
                   />
                 </Button>
               </div>
-              <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2">
+              <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
                 <FormField control={form.control} name="takaNumber" render={({ field }) => (
                   <FormItem>
                     <FormControl><Input placeholder="Taka No." {...field} className="h-8"/></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                 <FormField control={form.control} name="machineNumber" render={({ field }) => (
-                  <FormItem>
-                    <FormControl><Input placeholder="M/C No." {...field} className="h-8"/></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />

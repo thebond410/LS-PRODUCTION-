@@ -22,7 +22,6 @@ export type ExtractDeliveryDataInput = z.infer<typeof ExtractDeliveryDataInputSc
 
 const DeliveryEntrySchema = z.object({
     takaNumber: z.string().describe('The taka number.'),
-    machineNumber: z.string().describe('The machine number.'),
     meter: z.string().describe('The meter reading.'),
 });
 
@@ -42,12 +41,13 @@ const extractPrompt = ai.definePrompt({
   prompt: `You are an AI assistant that extracts information from an image of a handwritten slip.
 The image can contain one or more delivery entries. Sometimes multiple entries are written side-by-side, often separated by a '+' sign.
 
-For each entry, you need to extract three numbers, each on a new line or clearly associated.
-1. The first number is the Taka Number.
-2. The second number is the Machine Number.
-3. The third number is the Meter reading. Meter values can be written like "120/" or "120-". You should interpret these as just "120".
+For each entry, you need to extract two numbers:
+1. The first number is the Taka Number (e.g., 2430).
+2. The second number, often written below the Taka number, is the Meter reading (e.g., 100).
 
-Extract all valid entries from the image provided.
+Meter values can be written like "120/" or "120-". You should interpret these as just "120".
+
+Extract all valid entries from the image provided. Do not extract a machine number.
 
 Image:
 {{media url=photoDataUri}}
