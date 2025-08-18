@@ -1,15 +1,16 @@
 
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Package, Truck, BarChart, Settings, Wifi, WifiOff, Loader2 } from 'lucide-react';
+import { LayoutDashboard, Package, Truck, BarChart, Settings, Wifi, WifiOff, Loader2, UploadCloud } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient, SupabaseClient, PostgrestError, RealtimeChannel } from '@supabase/supabase-js';
 import { useAppContext } from '@/context/AppContext';
 import { ProductionEntry, DeliveryEntry, Settings as AppSettings } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { Badge } from '@/components/ui/badge';
 
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', color: 'text-sky-500' },
@@ -22,7 +23,7 @@ const navItems = [
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { state, dispatch } = useAppContext();
-  const { settings, isInitialized, productionEntries, deliveryEntries } = state;
+  const { settings, isInitialized, productionEntries, deliveryEntries, unsyncedChanges } = state;
   const { toast } = useToast();
   
   const [isOnline, setIsOnline] = useState(true);
@@ -40,58 +41,60 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         setSupabase(client);
     }
   }, [settings.supabaseUrl, settings.supabaseKey]);
-  
-  // New Effect for manual sync trigger
-  useEffect(() => {
-    const handleSyncRequest = async () => {
-        if (!supabase || !isOnline) {
-          toast({ variant: 'destructive', title: 'Cannot Sync', description: 'Not connected to Supabase.' });
-          return;
+
+  const handleSync = async () => {
+    if (!supabase || !isOnline || isSyncing) {
+        if (!isSyncing) {
+            toast({ variant: 'destructive', title: 'Cannot Sync', description: 'Not connected or already syncing.' });
+        }
+        return;
+    }
+
+    setIsSyncing(true);
+    try {
+        if (unsyncedChanges.production.add.length > 0) {
+            const { error } = await supabase.from('production_entries').upsert(unsyncedChanges.production.add);
+            if (error) throw new Error(`Production Add: ${error.message}`);
+        }
+        if (unsyncedChanges.production.update.length > 0) {
+            const { error } = await supabase.from('production_entries').upsert(unsyncedChanges.production.update);
+            if (error) throw new Error(`Production Update: ${error.message}`);
+        }
+        if (unsyncedChanges.production.delete.length > 0) {
+            const { error } = await supabase.from('production_entries').delete().in('takaNumber', unsyncedChanges.production.delete);
+            if (error) throw new Error(`Production Delete: ${error.message}`);
         }
 
-        setIsSyncing(true);
-        try {
-            const { data: remoteProdTakas, error: remoteProdError } = await supabase.from('production_entries').select('takaNumber');
-            if (remoteProdError) throw remoteProdError;
-            const remoteTakaNumbers = new Set(remoteProdTakas.map(p => p.takaNumber));
-            const newProductionEntries = productionEntries.filter(p => !remoteTakaNumbers.has(p.takaNumber));
-            
-            if(newProductionEntries.length > 0) {
-              const { error: prodError } = await supabase.from('production_entries').upsert(newProductionEntries, { onConflict: 'takaNumber' });
-              if (prodError) throw prodError;
-            }
-
-            // Sync for delivery entries
-            const { data: remoteDeliveryIds, error: remoteDeliveryError } = await supabase.from('delivery_entries').select('id');
-            if(remoteDeliveryError) throw remoteDeliveryError;
-            const remoteDelivIds = new Set(remoteDeliveryIds.map(d => d.id));
-            const newDeliveryEntries = deliveryEntries.filter(d => !remoteDelivIds.has(d.id));
-
-            if(newDeliveryEntries.length > 0) {
-                 const { error: delivError } = await supabase.from('delivery_entries').upsert(newDeliveryEntries, { onConflict: 'id' });
-                 if (delivError) throw delivError;
-            }
-
-
-            // Settings
+        if (unsyncedChanges.delivery.add.length > 0) {
+            const { error } = await supabase.from('delivery_entries').upsert(unsyncedChanges.delivery.add);
+            if (error) throw new Error(`Delivery Add: ${error.message}`);
+        }
+        if (unsyncedChanges.delivery.update.length > 0) {
+            const { error } = await supabase.from('delivery_entries').upsert(unsyncedChanges.delivery.update);
+            if (error) throw new Error(`Delivery Update: ${error.message}`);
+        }
+        if (unsyncedChanges.delivery.delete.length > 0) {
+            const { error } = await supabase.from('delivery_entries').delete().in('id', unsyncedChanges.delivery.delete);
+            if (error) throw new Error(`Delivery Delete: ${error.message}`);
+        }
+        
+        if (unsyncedChanges.settings) {
             const { supabaseUrl, supabaseKey, ...settingsToStore } = settings;
-            const { error: settingsError } = await supabase.from('app_settings').upsert({ id: 1, settings: settingsToStore }, { onConflict: 'id' });
-            if (settingsError) throw settingsError;
-
-            toast({ title: 'Sync Complete', description: 'All local data has been saved to Supabase.' });
-        } catch (error) {
-            console.error('Sync error:', error);
-            toast({ variant: 'destructive', title: 'Sync Error', description: 'Failed to save data to Supabase.' });
-        } finally {
-            setIsSyncing(false);
+            const { error } = await supabase.from('app_settings').upsert({ id: 1, settings: settingsToStore }, { onConflict: 'id' });
+            if (error) throw new Error(`Settings: ${error.message}`);
         }
-    };
-    
-    // @ts-ignore
-    window.addEventListener('request-sync', handleSyncRequest);
-    // @ts-ignore
-    return () => window.removeEventListener('request-sync', handleSyncRequest);
-  }, [supabase, isOnline, toast, productionEntries, deliveryEntries, settings]);
+
+        dispatch({ type: 'CLEAR_UNSYNCED_CHANGES' });
+        toast({ title: 'Sync Complete', description: 'All local changes have been saved.' });
+
+    } catch (error) {
+        const errorMessage = (error as Error).message || 'An unknown error occurred';
+        console.error('Sync error:', errorMessage);
+        toast({ variant: 'destructive', title: 'Sync Error', description: `Failed to save data: ${errorMessage}` });
+    } finally {
+        setIsSyncing(false);
+    }
+  };
 
 
   // Effect for initial data load and setting up real-time subscriptions
@@ -120,7 +123,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
           if (settingsError.code !== 'PGRST116') throw settingsError;
         }
         if (settingsData?.settings) {
-          dispatch({ type: 'UPDATE_SETTINGS', payload: settingsData.settings as AppSettings });
+          dispatch({ type: 'UPDATE_SETTINGS_FROM_SERVER', payload: settingsData.settings as AppSettings });
         }
 
         const { data: prodData, error: prodError } = await supabase.from('production_entries').select('*');
@@ -131,6 +134,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         if (delError) throw delError;
         dispatch({ type: 'SET_DELIVERY_ENTRIES', payload: delData as DeliveryEntry[] });
 
+        dispatch({ type: 'CLEAR_UNSYNCED_CHANGES' });
         setIsOnline(true);
         toast({ title: 'Sync Successful', description: 'Data loaded from Supabase.' });
 
@@ -156,7 +160,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
           } else if (payload.eventType === 'UPDATE') {
              dispatch({ type: 'UPDATE_PRODUCTION_ENTRY', payload: payload.new as ProductionEntry });
           } else if (payload.eventType === 'DELETE') {
-             dispatch({ type: 'DELETE_PRODUCTION_ENTRY', payload: (payload.old as ProductionEntry).takaNumber });
+             dispatch({ type: 'DELETE_PRODUCTION_ENTRY', payload: (payload.old as { takaNumber: string }).takaNumber });
           }
         }
       ).subscribe();
@@ -169,7 +173,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         } else if (payload.eventType === 'UPDATE') {
           dispatch({ type: 'UPDATE_DELIVERY_ENTRY', payload: payload.new as DeliveryEntry });
         } else if (payload.eventType === 'DELETE') {
-          dispatch({ type: 'DELETE_DELIVERY_ENTRY', payload: (payload.old as DeliveryEntry).id });
+          dispatch({ type: 'DELETE_DELIVERY_ENTRY', payload: (payload.old as { id: string }).id });
         }
       }).subscribe();
     
@@ -177,7 +181,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     settingsChannelRef.current = supabase.channel('app_settings')
         .on<any>('postgres_changes', {event: 'UPDATE', schema: 'public', table: 'app_settings', filter: 'id=eq.1'}, (payload) => {
             if (payload.new.settings) {
-                dispatch({type: 'UPDATE_SETTINGS', payload: payload.new.settings as AppSettings});
+                dispatch({type: 'UPDATE_SETTINGS_FROM_SERVER', payload: payload.new.settings as AppSettings});
                 toast({title: "Settings Updated", description: "Settings were updated from another device."});
             }
         }).subscribe();
@@ -185,20 +189,22 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
     const connectionInterval = setInterval(async () => {
         try {
-            const { error } = await supabase.from('production_entries').select('id', { count: 'exact', head: true });
+            const { error } = await supabase.from('production_entries').select('takaNumber', { count: 'exact', head: true });
             if (error && error.code === '42P01') {
                  setIsOnline(false);
             } else if (error) {
-                // Other transient network error, might be offline
                 setIsOnline(false);
             }
             else {
+                if (!isOnline) { // If it was offline and is now online
+                    handleSync(); // Attempt to sync on reconnect
+                }
                 setIsOnline(true);
             }
         } catch (e) {
             setIsOnline(false);
         }
-    }, 30000);
+    }, 10000);
 
     return () => {
       clearInterval(connectionInterval);
@@ -206,8 +212,19 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       if (deliveryChannelRef.current) supabase.removeChannel(deliveryChannelRef.current);
       if (settingsChannelRef.current) supabase.removeChannel(settingsChannelRef.current);
     };
-  }, [isInitialized, supabase, dispatch, toast]);
+  }, [isInitialized, supabase]);
 
+  const pendingCount = useMemo(() => {
+    return (
+        unsyncedChanges.production.add.length +
+        unsyncedChanges.production.update.length +
+        unsyncedChanges.production.delete.length +
+        unsyncedChanges.delivery.add.length +
+        unsyncedChanges.delivery.update.length +
+        unsyncedChanges.delivery.delete.length +
+        (unsyncedChanges.settings ? 1 : 0)
+    );
+  }, [unsyncedChanges]);
 
   return (
     <div className="flex flex-col h-screen w-full bg-background md:max-w-none max-w-md mx-auto">
@@ -232,6 +249,12 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 })}
             </div>
             <div className='px-2 flex items-center gap-2'>
+                {pendingCount > 0 && (
+                   <Button variant="ghost" size="icon" className="h-8 w-8 relative" onClick={handleSync} disabled={isSyncing || !isOnline}>
+                     {isSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-5 w-5 text-primary" />}
+                     <Badge variant="destructive" className="absolute -top-1 -right-2 px-1.5 h-5">{pendingCount}</Badge>
+                   </Button>
+                )}
                 {isSyncing ? (
                     <Loader2 className="h-5 w-5 animate-spin text-primary" title="Syncing..." />
                 ) : (
