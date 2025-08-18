@@ -5,13 +5,14 @@ import { useState, useMemo } from "react";
 import { useAppContext } from "@/context/AppContext";
 import { ProductionEntry } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FilePenLine, Trash2, Check, X, ArrowUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "../ui/badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "../ui/select";
+import { ScrollArea } from "../ui/scroll-area";
 
 type SortKey = keyof ProductionEntry | '';
 type SortDirection = 'asc' | 'desc';
@@ -55,10 +56,15 @@ export function ProductionList() {
   const [editingTaka, setEditingTaka] = useState<string | null>(null);
   const [editedEntry, setEditedEntry] = useState<ProductionEntry | null>(null);
 
-  const [sortKey, setSortKey] = useState<SortKey>('');
+  const [sortKey, setSortKey] = useState<SortKey>('takaNumber');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
-  const deliveredTakaNumbers = new Set(deliveryEntries.map(d => d.takaNumber));
+  const deliveredTakaNumbers = useMemo(() => new Set(deliveryEntries.map(d => d.takaNumber)), [deliveryEntries]);
+  
+  const stockEntries = useMemo(() => 
+    productionEntries.filter(p => !deliveredTakaNumbers.has(p.takaNumber)),
+    [productionEntries, deliveredTakaNumbers]
+  );
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -87,7 +93,7 @@ export function ProductionList() {
   };
   
   const handleDeleteClick = (takaNumber: string) => {
-    if (window.confirm(`Are you sure you want to delete Taka ${takaNumber}?`)) {
+    if (window.confirm(`Are you sure you want to delete Taka ${takaNumber}? This will also remove any associated delivery record.`)) {
       dispatch({ type: 'DELETE_PRODUCTION_ENTRY', payload: takaNumber });
     }
   }
@@ -98,21 +104,24 @@ export function ProductionList() {
     }
   };
 
-  const sortedEntries = useMemo(() => {
-    let entries = [...productionEntries];
+  const sortedStockEntries = useMemo(() => {
+    let entries = [...stockEntries];
     if (sortKey) {
       entries.sort((a, b) => {
         const aValue = a[sortKey];
         const bValue = b[sortKey];
 
         if (sortKey === 'takaNumber' || sortKey === 'machineNumber' || sortKey === 'meter') {
-            return (parseFloat(aValue) - parseFloat(bValue)) * (sortDirection === 'asc' ? 1 : -1);
+            const numA = parseFloat(aValue.replace(/[^0-9.]/g, '')) || 0;
+            const numB = parseFloat(bValue.replace(/[^0-9.]/g, '')) || 0;
+            return (numA - numB) * (sortDirection === 'asc' ? 1 : -1);
         }
 
         if (sortKey === 'date') {
-            const aDate = new Date(aValue.split('/').reverse().join('-'));
-            const bDate = new Date(bValue.split('/').reverse().join('-'));
-            return (aDate.getTime() - bDate.getTime()) * (sortDirection === 'asc' ? 1 : -1);
+            const dateA = new Date(aValue.split('/').reverse().join('-'));
+            const dateB = new Date(bValue.split('/').reverse().join('-'));
+            if(isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
+            return (dateA.getTime() - dateB.getTime()) * (sortDirection === 'asc' ? 1 : -1);
         }
 
         if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
@@ -120,18 +129,21 @@ export function ProductionList() {
         return 0;
       });
     } else {
-       // Default sort: recent first
-       entries.reverse();
+       entries.sort((a,b) => parseFloat(b.takaNumber) - parseFloat(a.takaNumber));
     }
     return entries;
-  }, [productionEntries, sortKey, sortDirection]);
+  }, [stockEntries, sortKey, sortDirection]);
 
   const allTableData = Array.from({ length: productionTables }, (_, i) => {
     const listKey = `list${i + 1}` as keyof typeof listTakaRanges;
     const range = listTakaRanges[listKey];
+    const entries = filterEntriesByRange(sortedStockEntries, range.start, range.end);
+    const totalMeters = entries.reduce((sum, entry) => sum + (parseFloat(entry.meter) || 0), 0);
     return {
       title: `List ${i + 1}`,
-      entries: filterEntriesByRange(sortedEntries, range.start, range.end),
+      entries: entries,
+      totalTakas: entries.length,
+      totalMeters: totalMeters.toFixed(2),
     }
   });
 
@@ -178,7 +190,7 @@ export function ProductionList() {
     <TableHead className={cn("p-[2px] text-[10px] font-bold h-6 cursor-pointer", className)} onClick={() => handleSort(sortKeyName)}>
         <div className="flex items-center">
             {label}
-            <ArrowUpDown className="ml-1 h-3 w-3" />
+            {sortKey === sortKeyName && <ArrowUpDown className="ml-1 h-3 w-3" />}
         </div>
     </TableHead>
   );
@@ -191,7 +203,7 @@ export function ProductionList() {
             <SelectValue placeholder="Select a list" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Lists</SelectItem>
+            <SelectItem value="all">All Lists (Stock)</SelectItem>
             {Array.from({ length: productionTables }).map((_, i) => (
               <SelectItem key={i} value={`list${i + 1}`}>List {i + 1}</SelectItem>
             ))}
@@ -206,53 +218,61 @@ export function ProductionList() {
             </CardHeader>
             <CardContent className="p-0 flex-grow">
               {data.entries.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <SortableHeader sortKeyName="takaNumber" label="Taka" className="text-sky-600" />
-                      <SortableHeader sortKeyName="machineNumber" label="M/C" className="text-red-600" />
-                      <SortableHeader sortKeyName="meter" label="Meter" className="text-green-600" />
-                      <SortableHeader sortKeyName="date" label="DT" className="text-purple-600" />
-                      <TableHead className="p-[2px] text-[10px] font-bold text-right h-6">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.entries.map((entry) => (
-                      <TableRow key={entry.takaNumber} className={cn("m-[2px] h-6", deliveredTakaNumbers.has(entry.takaNumber) && "bg-destructive/10")}>
-                        <TableCell className="p-[2px] text-[10px] font-bold relative text-sky-600">
-                          {renderCellContent(entry, 'takaNumber')}
-                          {deliveredTakaNumbers.has(entry.takaNumber) && (
-                            <Badge variant="destructive" className="absolute -top-2 -right-2 text-[8px] p-0.5 h-auto">Delivered</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="p-[2px] text-[10px] font-bold text-red-600">{renderCellContent(entry, 'machineNumber')}</TableCell>
-                        <TableCell className="p-[2px] text-[10px] font-bold text-green-600">{renderCellContent(entry, 'meter')}</TableCell>
-                        <TableCell className="p-[2px] text-[10px] font-bold text-purple-600">{renderCellContent(entry, 'date')}</TableCell>
-                        <TableCell className="p-[2px] text-right">
-                          {editingTaka === entry.takaNumber ? (
-                            <>
-                              <Button variant="ghost" size="icon" className="h-5 w-5 text-green-600" onClick={handleSaveClick}>
-                                <Check className="h-3 w-3" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive" onClick={handleCancelClick}>
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </>
-                          ) : (
-                            <>
-                              <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => handleEditClick(entry)}>
-                                <FilePenLine className="h-3 w-3" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive" onClick={() => handleDeleteClick(entry.takaNumber)}>
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </>
-                          )}
-                        </TableCell>
+                <ScrollArea className="h-[calc(100vh-250px)]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <SortableHeader sortKeyName="takaNumber" label="Taka" className="text-sky-600" />
+                        <SortableHeader sortKeyName="machineNumber" label="M/C" className="text-red-600" />
+                        <SortableHeader sortKeyName="meter" label="Meter" className="text-green-600" />
+                        <SortableHeader sortKeyName="date" label="DT" className="text-purple-600" />
+                        <TableHead className="p-[2px] text-[10px] font-bold text-right h-6">Actions</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {data.entries.map((entry) => (
+                        <TableRow key={entry.takaNumber} className={cn("m-[2px] h-6")}>
+                          <TableCell className="p-[2px] text-[10px] font-bold relative text-sky-600">
+                            {renderCellContent(entry, 'takaNumber')}
+                          </TableCell>
+                          <TableCell className="p-[2px] text-[10px] font-bold text-red-600">{renderCellContent(entry, 'machineNumber')}</TableCell>
+                          <TableCell className="p-[2px] text-[10px] font-bold text-green-600">{renderCellContent(entry, 'meter')}</TableCell>
+                          <TableCell className="p-[2px] text-[10px] font-bold text-purple-600">{renderCellContent(entry, 'date')}</TableCell>
+                          <TableCell className="p-[2px] text-right">
+                            {editingTaka === entry.takaNumber ? (
+                              <>
+                                <Button variant="ghost" size="icon" className="h-5 w-5 text-green-600" onClick={handleSaveClick}>
+                                  <Check className="h-3 w-3" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive" onClick={handleCancelClick}>
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => handleEditClick(entry)}>
+                                  <FilePenLine className="h-3 w-3" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive" onClick={() => handleDeleteClick(entry.takaNumber)}>
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                    <TableFooter>
+                      <TableRow>
+                          <TableCell className="p-1 text-[12px] font-bold h-8">Total</TableCell>
+                          <TableCell className="p-1 text-[12px] font-bold h-8">{data.totalTakas}</TableCell>
+                          <TableCell className="p-1 text-[12px] font-bold h-8"></TableCell>
+                          <TableCell className="p-1 text-[12px] font-bold h-8">{data.totalMeters}</TableCell>
+                          <TableCell colSpan={2}></TableCell>
+                      </TableRow>
+                    </TableFooter>
+                  </Table>
+                </ScrollArea>
               ) : (
                 <p className="text-muted-foreground text-xs text-center py-4">
                   No entries for this list.

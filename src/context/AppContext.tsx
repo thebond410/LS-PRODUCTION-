@@ -37,6 +37,7 @@ type Action =
   | { type: 'UPDATE_PRODUCTION_ENTRY'; payload: ProductionEntry }
   | { type: 'DELETE_PRODUCTION_ENTRY'; payload: string }
   | { type: 'ADD_DELIVERY_ENTRY'; payload: DeliveryEntry }
+  | { type: 'ADD_DELIVERY_ENTRIES'; payload: DeliveryEntry[] }
   | { type: 'UPDATE_DELIVERY_ENTRY'; payload: DeliveryEntry }
   | { type: 'DELETE_DELIVERY_ENTRY'; payload: string }
   | { type: 'SET_PRODUCTION_ENTRIES'; payload: ProductionEntry[] }
@@ -75,9 +76,14 @@ const appReducer = (state: AppState, action: Action): AppState => {
         productionEntries: state.productionEntries.filter(
           (entry) => entry.takaNumber !== action.payload
         ),
+        deliveryEntries: state.deliveryEntries.filter(
+            (entry) => entry.takaNumber !== action.payload
+        ),
       };
     case 'ADD_DELIVERY_ENTRY':
       return { ...state, deliveryEntries: [...state.deliveryEntries, action.payload] };
+    case 'ADD_DELIVERY_ENTRIES':
+      return { ...state, deliveryEntries: [...state.deliveryEntries, ...action.payload] };
     case 'UPDATE_DELIVERY_ENTRY':
         return {
           ...state,

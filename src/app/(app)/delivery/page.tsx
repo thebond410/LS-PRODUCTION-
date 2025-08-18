@@ -10,10 +10,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useAppContext } from "@/context/AppContext";
 import { useToast } from '@/hooks/use-toast';
-import { Camera, PlusCircle, Loader2, FilePenLine, Trash2, Check, X, Upload, Video, CircleDotDashed } from 'lucide-react';
+import { Camera, PlusCircle, Loader2, FilePenLine, Trash2, Check, X, Upload, CircleDotDashed } from 'lucide-react';
 import { DeliveryEntry, ProductionEntry } from '@/types';
 import { extractDeliveryData, ExtractDeliveryDataOutput } from '@/ai/flows/extract-delivery-data-from-image';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -53,7 +53,7 @@ const filterEntriesByRange = (entries: ProductionEntry[], start?: string, end?: 
 export default function DeliveryPage() {
   const { state, dispatch } = useAppContext();
   const { settings, productionEntries, deliveryEntries } = state;
-  const { productionTables, listTakaRanges } = settings;
+  const { listTakaRanges } = settings;
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -109,19 +109,8 @@ export default function DeliveryPage() {
   
   const processExtractedData = (result: ExtractDeliveryDataOutput) => {
     if (result && result.entries.length > 0) {
-      const validatedEntries: (Omit<DeliveryFormData, 'partyName' | 'lotNumber'> & { machineNumber: string })[] = [];
-      for (const entry of result.entries) {
-        const { valid, error, machineNumber } = validateDeliveryData(entry);
-        if (!valid || !machineNumber) {
-          toast({ variant: 'destructive', title: 'Validation Error', description: error });
-          return; // Stop processing if any entry is invalid
-        }
-        validatedEntries.push({ takaNumber: entry.takaNumber, meter: entry.meter, machineNumber });
-      }
-
       setExtractedData(result.entries);
       setIsConfirmationOpen(true);
-      
     } else {
       toast({
         variant: "destructive",
@@ -179,12 +168,15 @@ export default function DeliveryPage() {
   };
 
 
-  const addDeliveryEntry = (data: Omit<DeliveryFormData, 'machineNumber'> & { machineNumber: string }, tpNumber?: number) => {
+  const addDeliveryEntry = (data: Omit<DeliveryFormData, 'partyName'|'lotNumber'> & { machineNumber: string }, tpNumber?: number) => {
+    const currentPartyName = getValues('partyName');
+    const currentLotNumber = getValues('lotNumber');
+    
     const newDeliveryEntry: DeliveryEntry = {
-      id: new Date().toISOString() + Math.random(), // Ensure unique ID
-      partyName: data.partyName,
-      lotNumber: data.lotNumber,
-      deliveryDate: new Date().toLocaleDateString('en-GB'), // dd/mm/yyyy
+      id: new Date().toISOString() + Math.random(),
+      partyName: currentPartyName,
+      lotNumber: currentLotNumber,
+      deliveryDate: new Date().toLocaleDateString('en-GB'),
       takaNumber: data.takaNumber,
       meter: data.meter,
       machineNumber: data.machineNumber,
@@ -193,6 +185,30 @@ export default function DeliveryPage() {
 
     dispatch({ type: 'ADD_DELIVERY_ENTRY', payload: newDeliveryEntry });
   };
+  
+  const addMultipleDeliveryEntries = (entries: (Omit<DeliveryFormData, 'partyName'|'lotNumber'> & { machineNumber: string })[]) => {
+    const currentPartyName = getValues('partyName');
+    const currentLotNumber = getValues('lotNumber');
+    let tpNumber: number | undefined = undefined;
+
+    if (entries.length > 1) {
+        const maxTp = deliveryEntries.reduce((max, entry) => Math.max(max, entry.tpNumber || 0), 0);
+        tpNumber = maxTp + 1;
+    }
+
+    const newEntries: DeliveryEntry[] = entries.map(entry => ({
+        id: new Date().toISOString() + Math.random() + entry.takaNumber,
+        partyName: currentPartyName,
+        lotNumber: currentLotNumber,
+        deliveryDate: new Date().toLocaleDateString('en-GB'),
+        takaNumber: entry.takaNumber,
+        meter: entry.meter,
+        machineNumber: entry.machineNumber,
+        tpNumber: tpNumber
+    }));
+    
+    dispatch({ type: 'ADD_DELIVERY_ENTRIES', payload: newEntries });
+  }
 
   const validateDeliveryData = (entry: { takaNumber: string, meter: string }): { valid: boolean, error?: string, machineNumber?: string } => {
     let sourceEntries = productionEntries;
@@ -218,15 +234,6 @@ export default function DeliveryPage() {
   };
 
   const handleConfirmExtraction = (confirmedEntries: { takaNumber: string; meter: string }[]) => {
-      const currentPartyName = getValues('partyName');
-      const currentLotNumber = getValues('lotNumber');
-      let tpNumber: number | undefined = undefined;
-
-      if (confirmedEntries.length > 1) {
-        const maxTp = deliveryEntries.reduce((max, entry) => Math.max(max, entry.tpNumber || 0), 0);
-        tpNumber = maxTp + 1;
-      }
-      
       const entriesToAdd: (Omit<DeliveryFormData, 'partyName'|'lotNumber'> & {machineNumber: string})[] = [];
 
       for (const entry of confirmedEntries) {
@@ -238,16 +245,15 @@ export default function DeliveryPage() {
         entriesToAdd.push({ ...entry, machineNumber });
       }
 
-      entriesToAdd.forEach(entry => {
-        addDeliveryEntry({
-          partyName: currentPartyName,
-          lotNumber: currentLotNumber,
-          takaNumber: entry.takaNumber,
-          machineNumber: entry.machineNumber,
-          meter: entry.meter,
-        }, tpNumber);
-      });
+      if(entriesToAdd.length === 1) {
+        addDeliveryEntry(entriesToAdd[0]);
+      } else if (entriesToAdd.length > 1) {
+        addMultipleDeliveryEntries(entriesToAdd);
+      }
+      
       toast({ title: 'Scan Successful', description: `${confirmedEntries.length} entries extracted and added.` });
+      const currentPartyName = getValues('partyName');
+      const currentLotNumber = getValues('lotNumber');
       reset({ partyName: currentPartyName, lotNumber: currentLotNumber, takaNumber: '', meter: '' });
   };
 
@@ -260,7 +266,9 @@ export default function DeliveryPage() {
     }
     addDeliveryEntry({ ...data, machineNumber });
     toast({ title: 'Success', description: `Taka ${data.takaNumber} marked as delivered.` });
-    reset({ partyName: data.partyName, lotNumber: data.lotNumber, takaNumber: '', meter: '' });
+    const currentPartyName = getValues('partyName');
+    const currentLotNumber = getValues('lotNumber');
+    reset({ partyName: currentPartyName, lotNumber: currentLotNumber, takaNumber: '', meter: '' });
   };
 
   const handleEditClick = (entry: DeliveryEntry) => {
@@ -294,7 +302,7 @@ export default function DeliveryPage() {
 
   const renderCellContent = (entry: DeliveryEntry, field: keyof DeliveryEntry) => {
     if (editingId === entry.id && editedEntry) {
-      if (field === 'tpNumber' || field === 'id' || field === 'takaNumber' || field === 'deliveryDate') {
+      if (field === 'id' || field === 'takaNumber' || field === 'deliveryDate' || field === 'machineNumber') {
          if (field === 'takaNumber' && entry.tpNumber) {
           return <>{entry.takaNumber} <span className="text-red-500 font-bold">TP {entry.tpNumber}</span></>;
         }
@@ -329,7 +337,7 @@ export default function DeliveryPage() {
     <div className="space-y-2">
        <header className="px-2 pt-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
-            <h1 className="text-base font-bold text-gray-800">Delivery</h1>
+            <h1 className="text-sm font-bold text-gray-800">Delivery</h1>
             <p className="text-muted-foreground text-sm hidden md:block">Record new deliveries.</p>
         </div>
         <div className="w-32">
@@ -339,7 +347,7 @@ export default function DeliveryPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Lists</SelectItem>
-                 {Array.from({ length: productionTables }).map((_, i) => (
+                 {Array.from({ length: settings.productionTables }).map((_, i) => (
                   <SelectItem key={i} value={`list${i + 1}`}>List {i + 1}</SelectItem>
                 ))}
               </SelectContent>
@@ -449,7 +457,7 @@ export default function DeliveryPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {[...deliveryEntries].reverse().map((entry) => (
+              {[...deliveryEntries].sort((a, b) => new Date(b.deliveryDate.split('/').reverse().join('-')).getTime() - new Date(a.deliveryDate.split('/').reverse().join('-')).getTime() || (b.tpNumber || 0) - (a.tpNumber || 0) || parseInt(b.takaNumber) - parseInt(a.takaNumber)).map((entry) => (
                 <TableRow key={entry.id}>
                   <TableCell className="p-1 text-[11px] font-bold truncate max-w-[40px]">{renderCellContent(entry, 'deliveryDate')}</TableCell>
                   <TableCell className="p-1 text-[11px] font-bold">{renderCellContent(entry, 'takaNumber')}</TableCell>
