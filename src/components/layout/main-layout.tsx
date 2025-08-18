@@ -13,31 +13,24 @@ import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
-const navItems = [
-  { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', color: 'text-sky-500' },
-  { href: '/production', icon: Package, label: 'Production', color: 'text-orange-500' },
-  { href: '/delivery', icon: Truck, label: 'Delivery', color: 'text-blue-500' },
-  { href: '/report', icon: BarChart, label: 'Report', color: 'text-green-500' },
-  { href: '/settings', icon: Settings, label: 'Settings', color: 'text-gray-500' },
-];
-
 const toSnakeCase = (obj: any) => {
-  if (typeof obj !== 'object' || obj === null) {
-    return obj;
-  }
-
-  if (Array.isArray(obj)) {
-    return obj.map(toSnakeCase);
-  }
-    
-  const newObj: any = {};
-  for (const key in obj) {
-    if (Object.prototype.hasOwnProperty.call(obj, key)) {
-      const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-      newObj[snakeKey] = obj[key];
+    if (typeof obj !== 'object' || obj === null) {
+        return obj;
     }
-  }
-  return newObj;
+
+    if (Array.isArray(obj)) {
+        return obj.map(toSnakeCase);
+    }
+
+    const newObj: any = {};
+    for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            // This logic is flawed for nested objects, but we don't have any in our models.
+            const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+            newObj[snakeKey] = obj[key];
+        }
+    }
+    return newObj;
 };
 
 
@@ -83,13 +76,20 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     setIsSyncing(true);
     try {
         const { production, delivery } = unsyncedChanges;
+        
+        const cleanProductionEntry = (entry: any) => {
+            const { isDelivered, partyName, lotNumber, deliveryDate, ...rest } = entry;
+            return rest;
+        };
 
         if (production.add.length > 0) {
-            const { error } = await supabase.from('production_entries').upsert(toSnakeCase(production.add), { onConflict: 'taka_number' });
+            const entriesToAdd = production.add.map(cleanProductionEntry).map(toSnakeCase);
+            const { error } = await supabase.from('production_entries').upsert(entriesToAdd, { onConflict: 'taka_number' });
             if (error) throw new Error(`Production Add: ${error.message}`);
         }
         if (production.update.length > 0) {
-            const { error } = await supabase.from('production_entries').upsert(toSnakeCase(production.update), { onConflict: 'taka_number' });
+            const entriesToUpdate = production.update.map(cleanProductionEntry).map(toSnakeCase);
+            const { error } = await supabase.from('production_entries').upsert(entriesToUpdate, { onConflict: 'taka_number' });
             if (error) throw new Error(`Production Update: ${error.message}`);
         }
         if (production.delete.length > 0) {
