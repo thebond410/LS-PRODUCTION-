@@ -142,7 +142,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       if (deliveryChannelRef.current) supabase.removeChannel(deliveryChannelRef.current);
       if (settingsChannelRef.current) supabase.removeChannel(settingsChannelRef.current);
     };
-  }, [isInitialized, supabase]);
+  }, [isInitialized, supabase, dispatch, toast]);
 
 
   return (
