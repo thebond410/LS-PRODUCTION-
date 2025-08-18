@@ -17,7 +17,6 @@ import { Camera, PlusCircle, Loader2, FilePenLine, Trash2, Check, X, Upload, Cir
 import { DeliveryEntry, ProductionEntry } from '@/types';
 import { extractDeliveryData, ExtractDeliveryDataOutput } from '@/ai/flows/extract-delivery-data-from-image';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { ConfirmationModal } from '@/components/delivery/confirmation-modal';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -67,9 +66,6 @@ export default function DeliveryPage() {
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [isCameraDialogOpen, setIsCameraDialogOpen] = useState(false);
   
-  const [extractedData, setExtractedData] = useState<ExtractDeliveryDataOutput['entries'] | null>(null);
-  const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
-  
   const [selectedList, setSelectedList] = useState<string>("all");
 
   const form = useForm<DeliveryFormData>({
@@ -106,18 +102,38 @@ export default function DeliveryPage() {
       }
     }
   }, [isCameraDialogOpen]);
-  
+
   const processExtractedData = (result: ExtractDeliveryDataOutput) => {
-    if (result && result.entries.length > 0) {
-      setExtractedData(result.entries);
-      setIsConfirmationOpen(true);
-    } else {
+    if (!result || result.entries.length === 0) {
       toast({
         variant: "destructive",
         title: "Extraction Failed",
         description: "No data could be extracted. Please try a clearer image.",
       });
+      return;
     }
+    
+    const entriesToAdd: (Omit<DeliveryFormData, 'partyName'|'lotNumber'> & {machineNumber: string})[] = [];
+
+    for (const entry of result.entries) {
+      const { valid, error, machineNumber } = validateDeliveryData(entry);
+      if (!valid || !machineNumber) {
+        toast({ variant: 'destructive', title: 'Validation Error', description: error });
+        return; 
+      }
+      entriesToAdd.push({ ...entry, machineNumber });
+    }
+
+    if(entriesToAdd.length === 1) {
+      addDeliveryEntry(entriesToAdd[0]);
+    } else if (entriesToAdd.length > 1) {
+      addMultipleDeliveryEntries(entriesToAdd);
+    }
+    
+    toast({ title: 'Scan Successful', description: `${result.entries.length} entries extracted and added.` });
+    const currentPartyName = getValues('partyName');
+    const currentLotNumber = getValues('lotNumber');
+    reset({ partyName: currentPartyName, lotNumber: currentLotNumber, takaNumber: '', meter: '' });
   };
 
 
@@ -232,31 +248,6 @@ export default function DeliveryPage() {
     }
     return { valid: true, machineNumber: productionEntry.machineNumber };
   };
-
-  const handleConfirmExtraction = (confirmedEntries: { takaNumber: string; meter: string }[]) => {
-      const entriesToAdd: (Omit<DeliveryFormData, 'partyName'|'lotNumber'> & {machineNumber: string})[] = [];
-
-      for (const entry of confirmedEntries) {
-        const { valid, error, machineNumber } = validateDeliveryData(entry);
-        if (!valid || !machineNumber) {
-          toast({ variant: 'destructive', title: 'Validation Error', description: error });
-          return;
-        }
-        entriesToAdd.push({ ...entry, machineNumber });
-      }
-
-      if(entriesToAdd.length === 1) {
-        addDeliveryEntry(entriesToAdd[0]);
-      } else if (entriesToAdd.length > 1) {
-        addMultipleDeliveryEntries(entriesToAdd);
-      }
-      
-      toast({ title: 'Scan Successful', description: `${confirmedEntries.length} entries extracted and added.` });
-      const currentPartyName = getValues('partyName');
-      const currentLotNumber = getValues('lotNumber');
-      reset({ partyName: currentPartyName, lotNumber: currentLotNumber, takaNumber: '', meter: '' });
-  };
-
 
   const onSubmit: SubmitHandler<Omit<DeliveryFormData, 'machineNumber'>> = (data) => {
     const { valid, error, machineNumber } = validateDeliveryData(data);
@@ -504,12 +495,8 @@ export default function DeliveryPage() {
           )}
         </CardContent>
       </Card>
-      <ConfirmationModal
-        isOpen={isConfirmationOpen}
-        onOpenChange={setIsConfirmationOpen}
-        data={extractedData}
-        onConfirm={handleConfirmExtraction}
-      />
     </div>
   );
 }
+
+    
