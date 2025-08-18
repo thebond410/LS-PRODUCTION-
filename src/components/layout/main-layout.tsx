@@ -58,7 +58,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         const { production, delivery } = unsyncedChanges;
 
         if (production.add.length > 0) {
-            const { error } = await supabase.from('production_entries').upsert(production.add.map(({id, ...rest}) => rest)); // Don't send local-only id
+            const { error } = await supabase.from('production_entries').upsert(production.add.map(({id, ...rest}) => rest));
             if (error) throw new Error(`Production Add: ${error.message}`);
         }
         if (production.update.length > 0) {
@@ -116,12 +116,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       try {
         const { data: settingsData, error: settingsError } = await supabase
           .from('app_settings')
-          .select('settings')
-          .eq('id', 1)
-          .single();
+          .select('settings', { count: 'exact', head: true });
 
-        if (settingsError) {
-          if (settingsError.code === '42P01') {
+        if (settingsError && settingsError.code === '42P01') {
             toast({
               variant: 'destructive',
               title: 'Database Setup Required',
@@ -129,11 +126,17 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             });
             setIsOnline(false);
             return;
-          }
-          if (settingsError.code !== 'PGRST116') throw settingsError;
         }
-        if (settingsData?.settings) {
-          dispatch({ type: 'UPDATE_SETTINGS_FROM_SERVER', payload: settingsData.settings as AppSettings });
+
+        const { data: remoteSettings, error: remoteSettingsError } = await supabase
+          .from('app_settings')
+          .select('settings')
+          .eq('id', 1)
+          .single();
+
+        if (remoteSettingsError && remoteSettingsError.code !== 'PGRST116') throw remoteSettingsError;
+        if (remoteSettings?.settings) {
+          dispatch({ type: 'UPDATE_SETTINGS_FROM_SERVER', payload: remoteSettings.settings as AppSettings });
         }
 
         const { data: prodData, error: prodError } = await supabase.from('production_entries').select('*');
@@ -286,5 +289,3 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-
-    
