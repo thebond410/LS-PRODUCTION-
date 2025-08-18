@@ -25,14 +25,21 @@ const toSnakeCase = (obj: any) => {
     const newObj: any = {};
     for (const key in obj) {
         if (Object.prototype.hasOwnProperty.call(obj, key)) {
-            // This logic is flawed for nested objects, but we don't have any in our models.
             const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-            newObj[snakeKey] = obj[key];
+            const value = obj[key];
+            newObj[snakeKey] = value === undefined ? null : value;
         }
     }
     return newObj;
 };
 
+const navItems = [
+    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, color: 'text-blue-500' },
+    { href: '/production', label: 'Production', icon: Package, color: 'text-orange-500' },
+    { href: '/delivery', label: 'Delivery', icon: Truck, color: 'text-green-500' },
+    { href: '/report', label: 'Report', icon: BarChart, color: 'text-purple-500' },
+    { href: '/settings', label: 'Settings', icon: Settings, color: 'text-gray-500' },
+];
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -98,11 +105,11 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         }
 
         if (delivery.add.length > 0) {
-            const { error } = await supabase.from('delivery_entries').upsert(toSnakeCase(delivery.add), { onConflict: 'id' });
+            const { error } = await supabase.from('delivery_entries').upsert(delivery.add.map(toSnakeCase), { onConflict: 'id' });
             if (error) throw new Error(`Delivery Add: ${error.message}`);
         }
         if (delivery.update.length > 0) {
-            const { error } = await supabase.from('delivery_entries').upsert(toSnakeCase(delivery.update), { onConflict: 'id' });
+            const { error } = await supabase.from('delivery_entries').upsert(delivery.update.map(toSnakeCase), { onConflict: 'id' });
             if (error) throw new Error(`Delivery Update: ${error.message}`);
         }
         if (delivery.delete.length > 0) {
@@ -141,7 +148,6 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     const syncData = async () => {
       setIsSyncing(true);
       try {
-        // Ping a known table first to check for connection and schema existence
         const { error: pingError } = await supabase
           .from('production_entries')
           .select('taka_number', { count: 'exact', head: true });
@@ -152,13 +158,13 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               title: 'Database Setup Required',
               description: "Tables not found. Please run the SQL script from the Settings page.",
             });
-            setIsOnline(false); // Can't sync if tables don't exist
+            setIsOnline(false); 
             return;
         } else if (pingError) {
-            throw pingError; // Other errors are connection problems
+            throw pingError; 
         }
 
-        setIsOnline(true); // If ping is successful, we are online
+        setIsOnline(true); 
 
         const { data: remoteSettings, error: remoteSettingsError } = await supabase
           .from('app_settings')
@@ -188,8 +194,8 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         const errorCode = (error as PostgrestError)?.code;
         console.error('Supabase connection error:', errorMessage);
 
-        if (errorCode !== '42P01') { // Don't toast for missing tables, already handled
-          toast({ variant: 'destructive', title: 'Sync Failed', description: `Could not connect to Supabase: ${errorMessage}` });
+        if (errorCode !== '42P01') { 
+          toast({ variant: 'destructive', title: 'Sync Failed', description: `Could not connect to Supabase. ${errorMessage}` });
         }
       } finally {
         setIsSyncing(false);
@@ -332,3 +338,4 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+ 
