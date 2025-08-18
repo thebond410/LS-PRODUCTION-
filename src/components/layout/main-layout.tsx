@@ -65,24 +65,24 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         const { production, delivery } = unsyncedChanges;
 
         if (production.add.length > 0) {
-            const { error } = await supabase.from('production_entries').upsert(production.add.map(({id, ...rest}) => rest));
+            const { error } = await supabase.from('production_entries').upsert(production.add.map(({id, ...rest}) => rest), { onConflict: 'taka_number' });
             if (error) throw new Error(`Production Add: ${error.message}`);
         }
         if (production.update.length > 0) {
-            const { error } = await supabase.from('production_entries').upsert(production.update);
+            const { error } = await supabase.from('production_entries').upsert(production.update, { onConflict: 'taka_number' });
             if (error) throw new Error(`Production Update: ${error.message}`);
         }
         if (production.delete.length > 0) {
-            const { error } = await supabase.from('production_entries').delete().in('takaNumber', production.delete);
+            const { error } = await supabase.from('production_entries').delete().in('taka_number', production.delete);
             if (error) throw new Error(`Production Delete: ${error.message}`);
         }
 
         if (delivery.add.length > 0) {
-            const { error } = await supabase.from('delivery_entries').upsert(delivery.add);
+            const { error } = await supabase.from('delivery_entries').upsert(delivery.add, { onConflict: 'id' });
             if (error) throw new Error(`Delivery Add: ${error.message}`);
         }
         if (delivery.update.length > 0) {
-            const { error } = await supabase.from('delivery_entries').upsert(delivery.update);
+            const { error } = await supabase.from('delivery_entries').upsert(delivery.update, { onConflict: 'id' });
             if (error) throw new Error(`Delivery Update: ${error.message}`);
         }
         if (delivery.delete.length > 0) {
@@ -124,7 +124,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         // Ping a known table first to check for connection and schema existence
         const { error: pingError } = await supabase
           .from('production_entries')
-          .select('takaNumber', { count: 'exact', head: true });
+          .select('taka_number', { count: 'exact', head: true });
 
         if (pingError && pingError.code === '42P01') {
             toast({
@@ -164,10 +164,12 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
       } catch (error) {
         setIsOnline(false);
-        const postgrestError = error as PostgrestError;
-        console.error('Supabase connection error:', postgrestError.message);
-        if (postgrestError.code !== '42P01') { // Don't toast for missing tables, already handled
-          toast({ variant: 'destructive', title: 'Sync Failed', description: `Could not connect to Supabase. ${postgrestError.message}` });
+        const errorMessage = (error as PostgrestError)?.message || (error as Error)?.message || 'An unknown error occurred during sync.';
+        const errorCode = (error as PostgrestError)?.code;
+        console.error('Supabase connection error:', errorMessage);
+
+        if (errorCode !== '42P01') { // Don't toast for missing tables, already handled
+          toast({ variant: 'destructive', title: 'Sync Failed', description: `Could not connect to Supabase: ${errorMessage}` });
         }
       } finally {
         setIsSyncing(false);
@@ -190,7 +192,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
           } else if (payload.eventType === 'UPDATE') {
              dispatch({ type: 'UPDATE_PRODUCTION_ENTRY', payload: payload.new as ProductionEntry });
           } else if (payload.eventType === 'DELETE') {
-             dispatch({ type: 'DELETE_PRODUCTION_ENTRY', payload: (payload.old as { takaNumber: string }).takaNumber });
+             dispatch({ type: 'DELETE_PRODUCTION_ENTRY', payload: (payload.old as { taka_number: string }).taka_number });
           }
         }
       ).subscribe((status, err) => {
@@ -310,3 +312,5 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
+    
