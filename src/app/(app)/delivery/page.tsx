@@ -9,12 +9,16 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
 import { useAppContext } from "@/context/AppContext";
 import { useToast } from '@/hooks/use-toast';
-import { Camera, PlusCircle, Loader2, FilePenLine, Trash2, Check, X } from 'lucide-react';
+import { Camera, PlusCircle, Loader2, FilePenLine, Trash2, Check, X, Upload, Video, CircleDotDashed } from 'lucide-react';
 import { DeliveryEntry, ProductionEntry } from '@/types';
-import { extractDeliveryData } from '@/ai/flows/extract-delivery-data-from-image';
+import { extractDeliveryData, ExtractDeliveryDataOutput } from '@/ai/flows/extract-delivery-data-from-image';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { ConfirmationModal } from '@/components/delivery/confirmation-modal';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const deliverySchema = z.object({
   partyName: z.string().min(2, "Party name is required"),
@@ -25,26 +29,139 @@ const deliverySchema = z.object({
 
 type DeliveryFormData = z.infer<typeof deliverySchema>;
 
+const formatShortDate = (dateString: string) => {
+    if (!dateString) return '';
+    const date = new Date(dateString.split('/').reverse().join('-'));
+    if (isNaN(date.getTime())) return dateString;
+    return `${date.getDate()}/${date.getMonth() + 1}`;
+};
+
+
 export default function DeliveryPage() {
   const { state, dispatch } = useAppContext();
   const { productionEntries, deliveryEntries } = state;
   const { toast } = useToast();
-  const [isScanning, setIsScanning] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editedEntry, setEditedEntry] = useState<DeliveryEntry | null>(null);
 
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
+  const [isCameraDialogOpen, setIsCameraDialogOpen] = useState(false);
+  
+  const [extractedData, setExtractedData] = useState<ExtractDeliveryDataOutput['entries'] | null>(null);
+  const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
 
   const form = useForm<DeliveryFormData>({
     resolver: zodResolver(deliverySchema),
     defaultValues: { partyName: '', lotNumber: '', takaNumber: '', meter: '' },
   });
 
-  const { setValue, trigger, watch, getValues, reset } = form;
+  const { watch, getValues, reset } = form;
   const partyName = watch('partyName');
   const lotNumber = watch('lotNumber');
-  const isScanDisabled = !partyName || !lotNumber || isScanning;
+  const isScanDisabled = !partyName || !lotNumber || isLoading;
+
+  useEffect(() => {
+    if (isCameraDialogOpen) {
+      const getCameraPermission = async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          setHasCameraPermission(true);
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+          }
+        } catch (error) {
+          console.error('Error accessing camera:', error);
+          setHasCameraPermission(false);
+        }
+      };
+      getCameraPermission();
+    } else {
+      // Stop camera stream when dialog closes
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+        videoRef.current.srcObject = null;
+      }
+    }
+  }, [isCameraDialogOpen]);
+  
+  const processExtractedData = (result: ExtractDeliveryDataOutput) => {
+    if (result && result.entries.length > 0) {
+      const validatedEntries: (Omit<DeliveryFormData, 'partyName' | 'lotNumber'> & { machineNumber: string })[] = [];
+      for (const entry of result.entries) {
+        const { valid, error, machineNumber } = validateDeliveryData(entry);
+        if (!valid || !machineNumber) {
+          toast({ variant: 'destructive', title: 'Validation Error', description: error });
+          return; // Stop processing if any entry is invalid
+        }
+        validatedEntries.push({ takaNumber: entry.takaNumber, meter: entry.meter, machineNumber });
+      }
+
+      setExtractedData(result.entries);
+      setIsConfirmationOpen(true);
+      
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Extraction Failed",
+        description: "No data could be extracted. Please try a clearer image.",
+      });
+    }
+  };
+
+
+  const handleDataExtraction = async (base64Data: string) => {
+    setIsLoading(true);
+    try {
+      const result = await extractDeliveryData({ photoDataUri: base64Data });
+      processExtractedData(result);
+    } catch (error) {
+      console.error("Extraction error:", error);
+      toast({
+        variant: "destructive",
+        title: "An Error Occurred",
+        description: "Something went wrong during data extraction.",
+      });
+    } finally {
+      setIsLoading(false);
+      setIsCameraDialogOpen(false);
+    }
+  };
+
+  const handleCapture = () => {
+    if (videoRef.current && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const video = videoRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext('2d');
+      if (context) {
+        context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+        const dataUri = canvas.toDataURL('image/jpeg');
+        handleDataExtraction(dataUri);
+      }
+    }
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => handleDataExtraction(reader.result as string);
+    reader.onerror = () => {
+      toast({ variant: "destructive", title: "File Error", description: "Could not read file." });
+    };
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
 
   const addDeliveryEntry = (data: Omit<DeliveryFormData, 'machineNumber'> & { machineNumber: string }, tpNumber?: number) => {
     const newDeliveryEntry: DeliveryEntry = {
@@ -59,8 +176,7 @@ export default function DeliveryPage() {
     };
 
     dispatch({ type: 'ADD_DELIVERY_ENTRY', payload: newDeliveryEntry });
-    toast({ title: 'Success', description: `Taka ${data.takaNumber} marked as delivered.` });
-    reset({ partyName: data.partyName, lotNumber: data.lotNumber, takaNumber: '', meter: '' });
+    // toast({ title: 'Success', description: `Taka ${data.takaNumber} marked as delivered.` });
   };
 
   const validateDeliveryData = (entry: { takaNumber: string, meter: string }): { valid: boolean, error?: string, machineNumber?: string } => {
@@ -79,84 +195,41 @@ export default function DeliveryPage() {
     return { valid: true, machineNumber: productionEntry.machineNumber };
   };
 
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-  
-    setIsScanning(true);
-  
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = async () => {
-      try {
-        const base64Data = reader.result as string;
-        const result = await extractDeliveryData({ photoDataUri: base64Data });
-  
-        if (result && result.entries.length > 0) {
-          let allEntriesValid = true;
-          const validatedEntries: (Omit<DeliveryFormData, 'partyName' | 'lotNumber'> & { machineNumber: string })[] = [];
+  const handleConfirmExtraction = (confirmedEntries: { takaNumber: string; meter: string }[]) => {
+      const currentPartyName = getValues('partyName');
+      const currentLotNumber = getValues('lotNumber');
+      let tpNumber: number | undefined = undefined;
 
-          for (const entry of result.entries) {
-            const { valid, error, machineNumber } = validateDeliveryData(entry);
-            if (!valid || !machineNumber) {
-              toast({ variant: 'destructive', title: 'Validation Error', description: error });
-              allEntriesValid = false;
-              break; 
-            }
-            validatedEntries.push({ takaNumber: entry.takaNumber, meter: entry.meter, machineNumber });
-          }
-  
-          if (allEntriesValid) {
-            const currentPartyName = getValues('partyName');
-            const currentLotNumber = getValues('lotNumber');
-            let tpNumber: number | undefined = undefined;
-
-            if (validatedEntries.length > 1) {
-              const maxTp = deliveryEntries.reduce((max, entry) => Math.max(max, entry.tpNumber || 0), 0);
-              tpNumber = maxTp + 1;
-            }
-
-            validatedEntries.forEach(entry => {
-              addDeliveryEntry({
-                partyName: currentPartyName,
-                lotNumber: currentLotNumber,
-                takaNumber: entry.takaNumber,
-                machineNumber: entry.machineNumber,
-                meter: entry.meter,
-              }, tpNumber);
-            });
-            toast({ title: 'Scan Successful', description: `${validatedEntries.length} entries extracted and added.` });
-          }
-        } else {
-          toast({
-            variant: "destructive",
-            title: "Extraction Failed",
-            description: "No data could be extracted. Please try a clearer image.",
-          });
-        }
-      } catch (error) {
-        console.error("Extraction error:", error);
-        toast({
-          variant: "destructive",
-          title: "An Error Occurred",
-          description: "Something went wrong during data extraction.",
-        });
-      } finally {
-        setIsScanning(false);
-        if(fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
+      if (confirmedEntries.length > 1) {
+        const maxTp = deliveryEntries.reduce((max, entry) => Math.max(max, entry.tpNumber || 0), 0);
+        tpNumber = maxTp + 1;
       }
-    };
-    reader.onerror = () => {
-      setIsScanning(false);
-      toast({
-        variant: "destructive",
-        title: "File Read Error",
-        description: "Could not read the selected file.",
+      
+      const entriesToAdd: (Omit<DeliveryFormData, 'partyName'|'lotNumber'> & {machineNumber: string})[] = [];
+
+      for (const entry of confirmedEntries) {
+        const { valid, error, machineNumber } = validateDeliveryData(entry);
+        if (!valid || !machineNumber) {
+          // This should ideally not happen as we validate before showing confirmation
+          toast({ variant: 'destructive', title: 'Validation Error', description: error });
+          return;
+        }
+        entriesToAdd.push({ ...entry, machineNumber });
+      }
+
+      entriesToAdd.forEach(entry => {
+        addDeliveryEntry({
+          partyName: currentPartyName,
+          lotNumber: currentLotNumber,
+          takaNumber: entry.takaNumber,
+          machineNumber: entry.machineNumber,
+          meter: entry.meter,
+        }, tpNumber);
       });
-    };
+      toast({ title: 'Scan Successful', description: `${confirmedEntries.length} entries extracted and added.` });
+      reset({ partyName: currentPartyName, lotNumber: currentLotNumber, takaNumber: '', meter: '' });
   };
+
 
   const onSubmit: SubmitHandler<Omit<DeliveryFormData, 'machineNumber'>> = (data) => {
     const { valid, error, machineNumber } = validateDeliveryData(data);
@@ -165,6 +238,8 @@ export default function DeliveryPage() {
       return;
     }
     addDeliveryEntry({ ...data, machineNumber });
+    toast({ title: 'Success', description: `Taka ${data.takaNumber} marked as delivered.` });
+    reset({ partyName: data.partyName, lotNumber: data.lotNumber, takaNumber: '', meter: '' });
   };
 
   const handleEditClick = (entry: DeliveryEntry) => {
@@ -198,11 +273,12 @@ export default function DeliveryPage() {
 
   const renderCellContent = (entry: DeliveryEntry, field: keyof DeliveryEntry) => {
     if (editingId === entry.id && editedEntry) {
-      // Don't render input for 'tpNumber'
       if (field === 'tpNumber' || field === 'id' || field === 'takaNumber' || field === 'deliveryDate') {
-         // Special handling for tpNumber display
          if (field === 'takaNumber' && entry.tpNumber) {
           return <>{entry.takaNumber} <span className="text-red-500 font-bold">TP {entry.tpNumber}</span></>;
+        }
+        if (field === 'deliveryDate') {
+            return formatShortDate(entry.deliveryDate);
         }
         return entry[field as keyof typeof entry]?.toString() || '';
       }
@@ -218,8 +294,15 @@ export default function DeliveryPage() {
     if (field === 'takaNumber' && entry.tpNumber) {
         return <>{entry.takaNumber} <span className="text-red-500 font-bold">TP {entry.tpNumber}</span></>;
     }
+    if (field === 'deliveryDate') {
+        return formatShortDate(entry.deliveryDate);
+    }
     return entry[field as keyof typeof entry]?.toString() || '';
   };
+  
+  const totalTakas = deliveryEntries.length;
+  const totalMeters = deliveryEntries.reduce((sum, entry) => sum + (parseFloat(entry.meter) || 0), 0).toFixed(2);
+
 
   return (
     <div className="space-y-2">
@@ -245,17 +328,48 @@ export default function DeliveryPage() {
                     <FormMessage />
                   </FormItem>
                 )} />
-                <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => fileInputRef.current?.click()} disabled={isScanDisabled}>
-                  {isScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    className="sr-only"
-                    accept="image/*"
-                    onChange={handleFileChange}
-                    disabled={isScanDisabled}
-                  />
-                </Button>
+
+                <Dialog open={isCameraDialogOpen} onOpenChange={setIsCameraDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button type="button" variant="outline" size="icon" className="h-8 w-8" disabled={isScanDisabled}>
+                      {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-md p-2">
+                    <DialogHeader>
+                      <DialogTitle>Scan Delivery Slip</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-2">
+                      <div className="relative">
+                          <video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline />
+                          <canvas ref={canvasRef} className="hidden" />
+                          {hasCameraPermission === false && (
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-md">
+                                  <Alert variant="destructive" className="m-4">
+                                      <AlertTitle>Camera Access Denied</AlertTitle>
+                                      <AlertDescription>Enable camera permissions to use this feature.</AlertDescription>
+                                  </Alert>
+                              </div>
+                          )}
+                          {isLoading && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-md">
+                               <Loader2 className="h-8 w-8 animate-spin text-white" />
+                            </div>
+                          )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                          <Button onClick={handleCapture} disabled={!hasCameraPermission || isLoading}>
+                              <CircleDotDashed className="mr-2" /> Capture
+                          </Button>
+                          <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={isLoading}>
+                              <Upload className="mr-2" /> Upload
+                              <input ref={fileInputRef} type="file" className="sr-only" accept="image/*" onChange={handleFileChange} />
+                          </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+
               </div>
               <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
                 <FormField control={form.control} name="takaNumber" render={({ field }) => (
@@ -285,6 +399,7 @@ export default function DeliveryPage() {
         </CardHeader>
         <CardContent className="p-0">
           {deliveryEntries.length > 0 ? (
+          <ScrollArea className="h-[calc(100vh-350px)]">
           <Table>
             <TableHeader>
               <TableRow>
@@ -300,11 +415,11 @@ export default function DeliveryPage() {
             <TableBody>
               {[...deliveryEntries].reverse().map((entry) => (
                 <TableRow key={entry.id}>
-                  <TableCell className="p-1 text-[11px] font-bold truncate max-w-[60px]">{renderCellContent(entry, 'deliveryDate')}</TableCell>
+                  <TableCell className="p-1 text-[11px] font-bold truncate max-w-[40px]">{renderCellContent(entry, 'deliveryDate')}</TableCell>
                   <TableCell className="p-1 text-[11px] font-bold">{renderCellContent(entry, 'takaNumber')}</TableCell>
                   <TableCell className="p-1 text-[11px] font-bold">{renderCellContent(entry, 'machineNumber')}</TableCell>
                   <TableCell className="p-1 text-[11px] font-bold">{renderCellContent(entry, 'meter')}</TableCell>
-                  <TableCell className="p-1 text-[11px] font-bold truncate max-w-[80px]">{renderCellContent(entry, 'partyName')}</TableCell>
+                  <TableCell className="p-1 text-[11px] font-bold truncate max-w-[60px]">{renderCellContent(entry, 'partyName')}</TableCell>
                   <TableCell className="p-1 text-[11px] font-bold">{renderCellContent(entry, 'lotNumber')}</TableCell>
                   <TableCell className="p-1 text-[11px] font-bold text-right">
                     {editingId === entry.id ? (
@@ -330,12 +445,28 @@ export default function DeliveryPage() {
                 </TableRow>
               ))}
             </TableBody>
+            <TableFooter>
+                <TableRow>
+                    <TableCell className="p-1 text-[12px] font-bold h-8">Total</TableCell>
+                    <TableCell className="p-1 text-[12px] font-bold h-8">{totalTakas}</TableCell>
+                    <TableCell className="p-1 text-[12px] font-bold h-8"></TableCell>
+                    <TableCell className="p-1 text-[12px] font-bold h-8">{totalMeters}</TableCell>
+                    <TableCell colSpan={3}></TableCell>
+                </TableRow>
+            </TableFooter>
           </Table>
+          </ScrollArea>
           ) : (
             <p className="text-muted-foreground text-sm text-center py-4">No deliveries recorded yet.</p>
           )}
         </CardContent>
       </Card>
+      <ConfirmationModal
+        isOpen={isConfirmationOpen}
+        onOpenChange={setIsConfirmationOpen}
+        data={extractedData}
+        onConfirm={handleConfirmExtraction}
+      />
     </div>
   );
 }
