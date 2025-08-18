@@ -47,7 +47,7 @@ export function ProductionList() {
 
   const handleEditClick = (entry: ProductionEntry) => {
     setEditingTaka(entry.takaNumber);
-    setEditedEntry(entry);
+    setEditedEntry(JSON.parse(JSON.stringify(entry)));
   };
 
   const handleCancelClick = () => {
@@ -79,7 +79,7 @@ export function ProductionList() {
     const range = listTakaRanges[listKey];
     return {
       title: `List ${i + 1}`,
-      entries: filterEntriesByRange(productionEntries, range.start, range.end),
+      entries: filterEntriesByRange([...productionEntries].reverse(), range.start, range.end),
     }
   });
 
