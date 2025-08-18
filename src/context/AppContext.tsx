@@ -53,6 +53,17 @@ const initialState: AppState = {
   unsyncedChanges: initialUnsyncedChanges,
 };
 
+const toCamelCase = (obj: any) => {
+  const newObj: any = {};
+  for (const key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      const camelKey = key.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
+      newObj[camelKey] = obj[key];
+    }
+  }
+  return newObj;
+};
+
 type Action =
   | { type: 'INITIALIZE_STATE'; payload: Partial<AppState> }
   | { type: 'UPDATE_SETTINGS'; payload: Settings }
@@ -64,8 +75,8 @@ type Action =
   | { type: 'ADD_DELIVERY_ENTRIES'; payload: DeliveryEntry[] }
   | { type: 'UPDATE_DELIVERY_ENTRY'; payload: DeliveryEntry }
   | { type: 'DELETE_DELIVERY_ENTRY'; payload: string }
-  | { type: 'SET_PRODUCTION_ENTRIES'; payload: ProductionEntry[] }
-  | { type: 'SET_DELIVERY_ENTRIES'; payload: DeliveryEntry[] }
+  | { type: 'SET_PRODUCTION_ENTRIES'; payload: any[] }
+  | { type: 'SET_DELIVERY_ENTRIES'; payload: any[] }
   | { type: 'CLEAR_UNSYNCED_CHANGES' };
   
 const appReducer = (state: AppState, action: Action): AppState => {
@@ -98,7 +109,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         newState = { ...state, settings: serverSettings };
         break;
     case 'ADD_PRODUCTION_ENTRIES':
-      const newEntries = action.payload.filter(
+      const newEntries = action.payload.map(toCamelCase).filter(
         (newEntry) => !state.productionEntries.some((existing) => existing.takaNumber === newEntry.takaNumber)
       );
       if (newEntries.length > 0) {
@@ -119,7 +130,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
       newState = {
         ...state,
         productionEntries: state.productionEntries.map((entry) =>
-          entry.takaNumber === action.payload.takaNumber ? action.payload : entry
+          entry.takaNumber === action.payload.takaNumber ? toCamelCase(action.payload) : entry
         ),
         unsyncedChanges: {
             ...state.unsyncedChanges,
@@ -156,22 +167,23 @@ const appReducer = (state: AppState, action: Action): AppState => {
       };
       break;
     case 'ADD_DELIVERY_ENTRY':
-      if (!state.deliveryEntries.some(e => e.id === action.payload.id)) {
+      const newDeliveryEntry = toCamelCase(action.payload);
+      if (!state.deliveryEntries.some(e => e.id === newDeliveryEntry.id)) {
         newState = { 
             ...state, 
-            deliveryEntries: [...state.deliveryEntries, action.payload],
+            deliveryEntries: [...state.deliveryEntries, newDeliveryEntry],
             unsyncedChanges: {
                 ...state.unsyncedChanges,
                 delivery: {
                     ...state.unsyncedChanges.delivery,
-                    add: [...state.unsyncedChanges.delivery.add.filter(a => a.id !== action.payload.id), action.payload]
+                    add: [...state.unsyncedChanges.delivery.add.filter(a => a.id !== newDeliveryEntry.id), newDeliveryEntry]
                 }
             }
         };
       }
       break;
     case 'ADD_DELIVERY_ENTRIES':
-       const newDeliveryEntries = action.payload.filter(
+       const newDeliveryEntries = action.payload.map(toCamelCase).filter(
         (newEntry) => !state.deliveryEntries.some((existing) => existing.id === newEntry.id)
       );
       if(newDeliveryEntries.length > 0) {
@@ -189,17 +201,18 @@ const appReducer = (state: AppState, action: Action): AppState => {
       }
       break;
     case 'UPDATE_DELIVERY_ENTRY':
+        const updatedDeliveryEntry = toCamelCase(action.payload);
         newState = {
           ...state,
           deliveryEntries: state.deliveryEntries.map((entry) =>
-            entry.id === action.payload.id ? action.payload : entry
+            entry.id === updatedDeliveryEntry.id ? updatedDeliveryEntry : entry
           ),
           unsyncedChanges: {
               ...state.unsyncedChanges,
               delivery: {
                   ...state.unsyncedChanges.delivery,
-                  add: state.unsyncedChanges.delivery.add.filter(d => d.id !== action.payload.id),
-                  update: [...state.unsyncedChanges.delivery.update.filter(u => u.id !== action.payload.id), action.payload]
+                  add: state.unsyncedChanges.delivery.add.filter(d => d.id !== updatedDeliveryEntry.id),
+                  update: [...state.unsyncedChanges.delivery.update.filter(u => u.id !== updatedDeliveryEntry.id), updatedDeliveryEntry]
               }
           }
         };
@@ -222,10 +235,10 @@ const appReducer = (state: AppState, action: Action): AppState => {
         };
         break;
     case 'SET_PRODUCTION_ENTRIES':
-        newState = { ...state, productionEntries: action.payload };
+        newState = { ...state, productionEntries: action.payload.map(toCamelCase) };
         break;
     case 'SET_DELIVERY_ENTRIES':
-        newState = { ...state, deliveryEntries: action.payload };
+        newState = { ...state, deliveryEntries: action.payload.map(toCamelCase) };
         break;
     case 'CLEAR_UNSYNCED_CHANGES':
         newState = { ...state, unsyncedChanges: initialUnsyncedChanges };
