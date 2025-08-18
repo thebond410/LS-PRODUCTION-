@@ -1,17 +1,20 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useAppContext } from "@/context/AppContext";
 import { ProductionEntry } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FilePenLine, Trash2, Check, X } from "lucide-react";
+import { FilePenLine, Trash2, Check, X, ArrowUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "../ui/badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "../ui/select";
+
+type SortKey = keyof ProductionEntry | '';
+type SortDirection = 'asc' | 'desc';
 
 const filterEntriesByRange = (entries: ProductionEntry[], start?: string, end?: string) => {
   if (!start || !end) return entries;
@@ -37,14 +40,11 @@ const formatShortDate = (dateString: string) => {
 const formatMeter = (meter: string) => {
     const num = parseFloat(meter);
     if (isNaN(num)) return meter;
-    // Check if it's a whole number
     if (num % 1 === 0) {
         return num.toString();
     }
-    // Otherwise, format to 2 decimal places
     return num.toFixed(2);
 };
-
 
 export function ProductionList() {
   const { state, dispatch } = useAppContext();
@@ -55,7 +55,19 @@ export function ProductionList() {
   const [editingTaka, setEditingTaka] = useState<string | null>(null);
   const [editedEntry, setEditedEntry] = useState<ProductionEntry | null>(null);
 
+  const [sortKey, setSortKey] = useState<SortKey>('');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
   const deliveredTakaNumbers = new Set(deliveryEntries.map(d => d.takaNumber));
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDirection('asc');
+    }
+  };
 
   const handleEditClick = (entry: ProductionEntry) => {
     setEditingTaka(entry.takaNumber);
@@ -86,12 +98,40 @@ export function ProductionList() {
     }
   };
 
+  const sortedEntries = useMemo(() => {
+    let entries = [...productionEntries];
+    if (sortKey) {
+      entries.sort((a, b) => {
+        const aValue = a[sortKey];
+        const bValue = b[sortKey];
+
+        if (sortKey === 'takaNumber' || sortKey === 'machineNumber' || sortKey === 'meter') {
+            return (parseFloat(aValue) - parseFloat(bValue)) * (sortDirection === 'asc' ? 1 : -1);
+        }
+
+        if (sortKey === 'date') {
+            const aDate = new Date(aValue.split('/').reverse().join('-'));
+            const bDate = new Date(bValue.split('/').reverse().join('-'));
+            return (aDate.getTime() - bDate.getTime()) * (sortDirection === 'asc' ? 1 : -1);
+        }
+
+        if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
+    } else {
+       // Default sort: recent first
+       entries.reverse();
+    }
+    return entries;
+  }, [productionEntries, sortKey, sortDirection]);
+
   const allTableData = Array.from({ length: productionTables }, (_, i) => {
     const listKey = `list${i + 1}` as keyof typeof listTakaRanges;
     const range = listTakaRanges[listKey];
     return {
       title: `List ${i + 1}`,
-      entries: filterEntriesByRange([...productionEntries].reverse(), range.start, range.end),
+      entries: filterEntriesByRange(sortedEntries, range.start, range.end),
     }
   });
 
@@ -118,7 +158,7 @@ export function ProductionList() {
           value={editedEntry[field]}
           onChange={handleInputChange}
           className="h-5 p-1 text-[10px] font-bold"
-          disabled={field === 'takaNumber'} // Don't allow editing taka number as it's the key
+          disabled={field === 'takaNumber'}
         />
       );
     }
@@ -133,6 +173,15 @@ export function ProductionList() {
     
     return entry[field];
   };
+  
+  const SortableHeader = ({ sortKeyName, label, className }: { sortKeyName: SortKey, label: string, className?: string }) => (
+    <TableHead className={cn("p-[2px] text-[10px] font-bold h-6 cursor-pointer", className)} onClick={() => handleSort(sortKeyName)}>
+        <div className="flex items-center">
+            {label}
+            <ArrowUpDown className="ml-1 h-3 w-3" />
+        </div>
+    </TableHead>
+  );
 
   return (
     <div className="space-y-2">
@@ -160,10 +209,10 @@ export function ProductionList() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="p-[2px] text-[10px] font-bold h-6 text-sky-600">Taka</TableHead>
-                      <TableHead className="p-[2px] text-[10px] font-bold h-6 text-red-600">M/C</TableHead>
-                      <TableHead className="p-[2px] text-[10px] font-bold h-6 text-green-600">Meter</TableHead>
-                      <TableHead className="p-[2px] text-[10px] font-bold h-6 text-purple-600">DT</TableHead>
+                      <SortableHeader sortKeyName="takaNumber" label="Taka" className="text-sky-600" />
+                      <SortableHeader sortKeyName="machineNumber" label="M/C" className="text-red-600" />
+                      <SortableHeader sortKeyName="meter" label="Meter" className="text-green-600" />
+                      <SortableHeader sortKeyName="date" label="DT" className="text-purple-600" />
                       <TableHead className="p-[2px] text-[10px] font-bold text-right h-6">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
