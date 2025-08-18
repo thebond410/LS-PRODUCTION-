@@ -10,6 +10,7 @@ import type {
 
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 1000000
+const SHORT_TOAST_DURATION = 1500; // 1.5 seconds
 
 type ToasterToast = ToastProps & {
   id: string
@@ -58,7 +59,7 @@ interface State {
 
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
 
-const addToRemoveQueue = (toastId: string) => {
+const addToRemoveQueue = (toastId: string, duration?: number) => {
   if (toastTimeouts.has(toastId)) {
     return
   }
@@ -69,7 +70,7 @@ const addToRemoveQueue = (toastId: string) => {
       type: "REMOVE_TOAST",
       toastId: toastId,
     })
-  }, TOAST_REMOVE_DELAY)
+  }, duration || TOAST_REMOVE_DELAY)
 
   toastTimeouts.set(toastId, timeout)
 }
@@ -92,14 +93,14 @@ export const reducer = (state: State, action: Action): State => {
 
     case "DISMISS_TOAST": {
       const { toastId } = action
+      const toast = state.toasts.find(t => t.id === toastId);
+      const isDestructive = toast?.variant === 'destructive';
 
-      // ! Side effects ! - This could be extracted into a dismissToast() action,
-      // but I'll keep it here for simplicity
       if (toastId) {
-        addToRemoveQueue(toastId)
+        addToRemoveQueue(toastId, isDestructive ? TOAST_REMOVE_DELAY : SHORT_TOAST_DURATION);
       } else {
         state.toasts.forEach((toast) => {
-          addToRemoveQueue(toast.id)
+           addToRemoveQueue(toast.id, toast.variant === 'destructive' ? TOAST_REMOVE_DELAY : SHORT_TOAST_DURATION)
         })
       }
 
@@ -163,6 +164,14 @@ function toast({ ...props }: Toast) {
       },
     },
   })
+  
+  // Auto-dismiss non-destructive toasts
+  if (props.variant !== 'destructive') {
+      setTimeout(() => {
+          dismiss();
+      }, SHORT_TOAST_DURATION);
+  }
+
 
   return {
     id: id,
