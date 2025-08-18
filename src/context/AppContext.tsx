@@ -44,37 +44,52 @@ type Action =
   | { type: 'DELETE_DELIVERY_ENTRY'; payload: string }
   | { type: 'SET_PRODUCTION_ENTRIES'; payload: ProductionEntry[] }
   | { type: 'SET_DELIVERY_ENTRIES'; payload: DeliveryEntry[] };
-
+  
 const appReducer = (state: AppState, action: Action): AppState => {
+  let newState = state;
   switch (action.type) {
     case 'INITIALIZE_STATE':
         const initializedState = { ...state, ...action.payload };
-        initializedState.settings.supabaseUrl = defaultSettings.supabaseUrl;
-        initializedState.settings.supabaseKey = defaultSettings.supabaseKey;
-        return { ...initializedState, isInitialized: true };
+        if (initializedState.settings) {
+          initializedState.settings.supabaseUrl = defaultSettings.supabaseUrl;
+          initializedState.settings.supabaseKey = defaultSettings.supabaseKey;
+        } else {
+          initializedState.settings = defaultSettings;
+        }
+        newState = { ...initializedState, isInitialized: true };
+        break;
     case 'UPDATE_SETTINGS':
-      return { 
-        ...state, 
-        settings: {
+       const updatedSettings = {
           ...action.payload,
           supabaseUrl: state.settings.supabaseUrl,
           supabaseKey: state.settings.supabaseKey,
-        } 
-      };
+        };
+        newState = { ...state, settings: updatedSettings };
+        window.dispatchEvent(new Event('request-sync'));
+        break;
     case 'ADD_PRODUCTION_ENTRIES':
       const newEntries = action.payload.filter(
         (newEntry) => !state.productionEntries.some((existing) => existing.takaNumber === newEntry.takaNumber)
       );
-      return { ...state, productionEntries: [...state.productionEntries, ...newEntries] };
+      if (newEntries.length > 0) {
+        newState = { ...state, productionEntries: [...state.productionEntries, ...newEntries] };
+        window.dispatchEvent(new Event('request-sync'));
+      }
+      break;
     case 'UPDATE_PRODUCTION_ENTRY':
-      return {
+      newState = {
         ...state,
         productionEntries: state.productionEntries.map((entry) =>
-          entry.takaNumber === action.payload.takaNumber ? action.payload : entry
+          entry.takaNumber === action.payload.takaNumber ? { ...action.payload, id: entry.id } : entry
         ),
       };
+      window.dispatchEvent(new Event('request-sync'));
+      break;
     case 'DELETE_PRODUCTION_ENTRY':
-      return {
+       const supabase = createClient(state.settings.supabaseUrl, state.settings.supabaseKey);
+       supabase.from('production_entries').delete().eq('takaNumber', action.payload).then();
+       supabase.from('delivery_entries').delete().eq('takaNumber', action.payload).then();
+       newState = {
         ...state,
         productionEntries: state.productionEntries.filter(
           (entry) => entry.takaNumber !== action.payload
@@ -83,55 +98,72 @@ const appReducer = (state: AppState, action: Action): AppState => {
             (entry) => entry.takaNumber !== action.payload
         ),
       };
+      break;
     case 'ADD_DELIVERY_ENTRY':
-      if (state.deliveryEntries.some(e => e.id === action.payload.id)) return state;
-      return { ...state, deliveryEntries: [...state.deliveryEntries, action.payload] };
+      if (!state.deliveryEntries.some(e => e.id === action.payload.id)) {
+        newState = { ...state, deliveryEntries: [...state.deliveryEntries, action.payload] };
+        window.dispatchEvent(new Event('request-sync'));
+      }
+      break;
     case 'ADD_DELIVERY_ENTRIES':
        const newDeliveryEntries = action.payload.filter(
         (newEntry) => !state.deliveryEntries.some((existing) => existing.id === newEntry.id)
       );
-      return { ...state, deliveryEntries: [...state.deliveryEntries, ...newDeliveryEntries] };
+      if(newDeliveryEntries.length > 0) {
+        newState = { ...state, deliveryEntries: [...state.deliveryEntries, ...newDeliveryEntries] };
+        window.dispatchEvent(new Event('request-sync'));
+      }
+      break;
     case 'UPDATE_DELIVERY_ENTRY':
-        return {
+        newState = {
           ...state,
           deliveryEntries: state.deliveryEntries.map((entry) =>
             entry.id === action.payload.id ? action.payload : entry
           ),
         };
+        window.dispatchEvent(new Event('request-sync'));
+        break;
     case 'DELETE_DELIVERY_ENTRY':
-        return {
+        const delSupabase = createClient(state.settings.supabaseUrl, state.settings.supabaseKey);
+        delSupabase.from('delivery_entries').delete().eq('id', action.payload).then();
+        newState = {
           ...state,
           deliveryEntries: state.deliveryEntries.filter(
             (entry) => entry.id !== action.payload
           ),
         };
+        break;
     case 'SET_PRODUCTION_ENTRIES':
-        return { ...state, productionEntries: action.payload };
+        newState = { ...state, productionEntries: action.payload };
+        break;
     case 'SET_DELIVERY_ENTRIES':
-        return { ...state, deliveryEntries: action.payload };
+        newState = { ...state, deliveryEntries: action.payload };
+        break;
     default:
       return state;
   }
+  
+  if (newState.isInitialized) {
+      try {
+        const { supabaseUrl, supabaseKey, ...settingsToStore } = newState.settings;
+        const stateToStore = { 
+          settings: settingsToStore,
+          productionEntries: newState.productionEntries,
+          deliveryEntries: newState.deliveryEntries
+        };
+        localStorage.setItem('ls-prod-tracker-state', JSON.stringify(stateToStore));
+      } catch (error) {
+        console.error("Failed to save state to localStorage", error);
+      }
+  }
+  return newState;
 };
 
 const AppContext = createContext<{ state: AppState; dispatch: React.Dispatch<Action> } | undefined>(undefined);
 
-const debounce = <F extends (...args: any[]) => any>(func: F, waitFor: number) => {
-    let timeout: NodeJS.Timeout;
-    return (...args: Parameters<F>): void => {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func(...args), waitFor);
-    };
-};
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(appReducer, initialState);
-  const supabaseRef = useRef<SupabaseClient | null>(null);
-
-  // Initialize Supabase client
-  if (!supabaseRef.current && state.settings.supabaseUrl && state.settings.supabaseKey) {
-    supabaseRef.current = createClient(state.settings.supabaseUrl, state.settings.supabaseKey);
-  }
 
   // Load initial state from localStorage
   useEffect(() => {
@@ -152,45 +184,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       dispatch({ type: 'INITIALIZE_STATE', payload: initialState });
     }
   }, []);
-  
-  // Local state changes to Supabase (debounced)
-  const debouncedSync = useRef(
-      debounce(async (newState: AppState) => {
-          const supabase = supabaseRef.current;
-          if (!supabase) return;
-
-          const { supabaseUrl, supabaseKey, ...settingsToStore } = newState.settings;
-
-          await Promise.all([
-              supabase.from('app_settings').upsert({ id: 1, settings: settingsToStore }, { onConflict: 'id' }),
-              supabase.from('production_entries').upsert(newState.productionEntries, { onConflict: 'takaNumber' }),
-              supabase.from('delivery_entries').upsert(newState.deliveryEntries, { onConflict: 'id' })
-          ]).catch(error => console.error("Debounced sync error:", error));
-
-      }, 2000)
-  ).current;
-
-
-  // Save state to localStorage and trigger debounced sync
-  useEffect(() => {
-    if (state.isInitialized) {
-      try {
-        const { supabaseUrl, supabaseKey, ...settingsToStore } = state.settings;
-        const stateToStore = { 
-          settings: settingsToStore,
-          productionEntries: state.productionEntries,
-          deliveryEntries: state.deliveryEntries
-        };
-        localStorage.setItem('ls-prod-tracker-state', JSON.stringify(stateToStore));
-
-        // Sync local changes to Supabase
-        debouncedSync(state);
-
-      } catch (error) {
-        console.error("Failed to save state to localStorage", error);
-      }
-    }
-  }, [state, debouncedSync]);
 
   return (
     <AppContext.Provider value={{ state, dispatch }}>
@@ -210,3 +203,5 @@ export const useAppContext = () => {
   }
   return context;
 };
+
+    

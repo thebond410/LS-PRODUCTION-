@@ -22,7 +22,7 @@ const navItems = [
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { state, dispatch } = useAppContext();
-  const { settings, isInitialized } = state;
+  const { settings, isInitialized, productionEntries, deliveryEntries } = state;
   const { toast } = useToast();
   
   const [isOnline, setIsOnline] = useState(true);
@@ -40,6 +40,58 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         setSupabase(client);
     }
   }, [settings.supabaseUrl, settings.supabaseKey]);
+  
+  // New Effect for manual sync trigger
+  useEffect(() => {
+    const handleSyncRequest = async () => {
+        if (!supabase || !isOnline) {
+          toast({ variant: 'destructive', title: 'Cannot Sync', description: 'Not connected to Supabase.' });
+          return;
+        }
+
+        setIsSyncing(true);
+        try {
+            const { data: remoteProdTakas, error: remoteProdError } = await supabase.from('production_entries').select('takaNumber');
+            if (remoteProdError) throw remoteProdError;
+            const remoteTakaNumbers = new Set(remoteProdTakas.map(p => p.takaNumber));
+            const newProductionEntries = productionEntries.filter(p => !remoteTakaNumbers.has(p.takaNumber));
+            
+            if(newProductionEntries.length > 0) {
+              const { error: prodError } = await supabase.from('production_entries').upsert(newProductionEntries, { onConflict: 'takaNumber' });
+              if (prodError) throw prodError;
+            }
+
+            // Sync for delivery entries
+            const { data: remoteDeliveryIds, error: remoteDeliveryError } = await supabase.from('delivery_entries').select('id');
+            if(remoteDeliveryError) throw remoteDeliveryError;
+            const remoteDelivIds = new Set(remoteDeliveryIds.map(d => d.id));
+            const newDeliveryEntries = deliveryEntries.filter(d => !remoteDelivIds.has(d.id));
+
+            if(newDeliveryEntries.length > 0) {
+                 const { error: delivError } = await supabase.from('delivery_entries').upsert(newDeliveryEntries, { onConflict: 'id' });
+                 if (delivError) throw delivError;
+            }
+
+
+            // Settings
+            const { supabaseUrl, supabaseKey, ...settingsToStore } = settings;
+            const { error: settingsError } = await supabase.from('app_settings').upsert({ id: 1, settings: settingsToStore }, { onConflict: 'id' });
+            if (settingsError) throw settingsError;
+
+            toast({ title: 'Sync Complete', description: 'All local data has been saved to Supabase.' });
+        } catch (error) {
+            console.error('Sync error:', error);
+            toast({ variant: 'destructive', title: 'Sync Error', description: 'Failed to save data to Supabase.' });
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+    
+    // @ts-ignore
+    window.addEventListener('request-sync', handleSyncRequest);
+    // @ts-ignore
+    return () => window.removeEventListener('request-sync', handleSyncRequest);
+  }, [supabase, isOnline, toast, productionEntries, deliveryEntries, settings]);
 
 
   // Effect for initial data load and setting up real-time subscriptions
@@ -132,8 +184,20 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
 
     const connectionInterval = setInterval(async () => {
-        const { error } = await supabase.from('production_entries').select('id', { count: 'exact', head: true });
-        setIsOnline(!error || (error.code !== '42P01' && error.code !== 'PGRST116'));
+        try {
+            const { error } = await supabase.from('production_entries').select('id', { count: 'exact', head: true });
+            if (error && error.code === '42P01') {
+                 setIsOnline(false);
+            } else if (error) {
+                // Other transient network error, might be offline
+                setIsOnline(false);
+            }
+            else {
+                setIsOnline(true);
+            }
+        } catch (e) {
+            setIsOnline(false);
+        }
     }, 30000);
 
     return () => {
@@ -184,3 +248,5 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
+    
