@@ -48,7 +48,7 @@ export default function ReportPage() {
         // Adjusting for dd/mm/yy format to avoid parsing issues
         const dateParts = entryDateStr.split('/');
         if (dateParts.length !== 3) return false;
-        const entryDate = new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`);
+        const entryDate = new Date(`20${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`);
         
         // Clear time part for accurate date comparison
         const fromDate = new Date(date.from!);
@@ -183,7 +183,7 @@ export default function ReportPage() {
                 </SelectContent>
                 </Select>
             </div>
-            <Button onClick={handleGenerateReport} className="w-full h-9 mt-2">Generate Report</Button>
+            <Button onClick={handleGenerateReport} className="w-full h-9">Generate Report</Button>
         </CardContent>
       </Card>
       
