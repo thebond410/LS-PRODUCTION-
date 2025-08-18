@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -38,7 +38,26 @@ export default function DeliveryPage() {
     defaultValues: { partyName: '', lotNumber: '', takaNumber: '', machineNumber: '', meter: '' },
   });
 
-  const { setValue, trigger } = form;
+  const { setValue, trigger, watch } = form;
+  const partyName = watch('partyName');
+  const lotNumber = watch('lotNumber');
+  const isScanDisabled = !partyName || !lotNumber || isScanning;
+
+  const addDeliveryEntry = (data: DeliveryFormData) => {
+    const newDeliveryEntry: DeliveryEntry = {
+      id: new Date().toISOString(),
+      partyName: data.partyName,
+      lotNumber: data.lotNumber,
+      deliveryDate: new Date().toLocaleDateString('en-GB'), // dd/mm/yyyy
+      takaNumber: data.takaNumber,
+      meter: data.meter,
+      machineNumber: data.machineNumber
+    };
+
+    dispatch({ type: 'ADD_DELIVERY_ENTRY', payload: newDeliveryEntry });
+    toast({ title: 'Success', description: `Taka ${data.takaNumber} marked as delivered.` });
+    form.reset({ partyName: data.partyName, lotNumber: data.lotNumber, takaNumber: '', machineNumber: '', meter: '' });
+  };
 
   const validateDeliveryData = (data: { takaNumber: string, machineNumber: string, meter: string, date?: string }) => {
     const productionEntry = productionEntries.find(p => p.takaNumber === data.takaNumber);
@@ -87,6 +106,14 @@ export default function DeliveryPage() {
             setValue('machineNumber', result.machineNumber);
             setValue('meter', result.meter);
             toast({ title: 'Scan Successful', description: 'Data extracted and validated.' });
+            // Direct add
+            addDeliveryEntry({
+              partyName: partyName,
+              lotNumber: lotNumber,
+              takaNumber: result.takaNumber,
+              machineNumber: result.machineNumber,
+              meter: result.meter,
+            });
           }
           
         } else {
@@ -125,20 +152,7 @@ export default function DeliveryPage() {
     if (!validateDeliveryData(data)) {
       return;
     }
-
-    const newDeliveryEntry: DeliveryEntry = {
-      id: new Date().toISOString(),
-      partyName: data.partyName,
-      lotNumber: data.lotNumber,
-      deliveryDate: new Date().toLocaleDateString('en-GB'), // dd/mm/yyyy
-      takaNumber: data.takaNumber,
-      meter: data.meter,
-      machineNumber: data.machineNumber
-    };
-
-    dispatch({ type: 'ADD_DELIVERY_ENTRY', payload: newDeliveryEntry });
-    toast({ title: 'Success', description: `Taka ${data.takaNumber} marked as delivered.` });
-    form.reset({ partyName: data.partyName, lotNumber: data.lotNumber, takaNumber: '', machineNumber: '', meter: '' });
+    addDeliveryEntry(data);
   };
 
   return (
@@ -165,7 +179,7 @@ export default function DeliveryPage() {
                     <FormMessage />
                   </FormItem>
                 )} />
-                <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => fileInputRef.current?.click()} disabled={isScanning}>
+                <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => fileInputRef.current?.click()} disabled={isScanDisabled}>
                   {isScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
                   <input
                     ref={fileInputRef}
@@ -173,7 +187,7 @@ export default function DeliveryPage() {
                     className="sr-only"
                     accept="image/*"
                     onChange={handleFileChange}
-                    disabled={isScanning}
+                    disabled={isScanDisabled}
                   />
                 </Button>
               </div>

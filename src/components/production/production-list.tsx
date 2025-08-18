@@ -144,25 +144,25 @@ export function ProductionList() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="p-[2px] text-[10px] font-bold h-6">Taka</TableHead>
-                      <TableHead className="p-[2px] text-[10px] font-bold h-6">M/C</TableHead>
-                      <TableHead className="p-[2px] text-[10px] font-bold h-6">Meter</TableHead>
-                      <TableHead className="p-[2px] text-[10px] font-bold h-6">DT</TableHead>
+                      <TableHead className="p-[2px] text-[10px] font-bold h-6 text-sky-600">Taka</TableHead>
+                      <TableHead className="p-[2px] text-[10px] font-bold h-6 text-red-600">M/C</TableHead>
+                      <TableHead className="p-[2px] text-[10px] font-bold h-6 text-green-600">Meter</TableHead>
+                      <TableHead className="p-[2px] text-[10px] font-bold h-6 text-purple-600">DT</TableHead>
                       <TableHead className="p-[2px] text-[10px] font-bold text-right h-6">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {data.entries.map((entry) => (
                       <TableRow key={entry.takaNumber} className={cn("m-[2px] h-6", deliveredTakaNumbers.has(entry.takaNumber) && "bg-destructive/10")}>
-                        <TableCell className="p-[2px] text-[10px] font-bold relative">
+                        <TableCell className="p-[2px] text-[10px] font-bold relative text-sky-600">
                           {renderCellContent(entry, 'takaNumber')}
                           {deliveredTakaNumbers.has(entry.takaNumber) && (
                             <Badge variant="destructive" className="absolute -top-2 -right-2 text-[8px] p-0.5 h-auto">Delivered</Badge>
                           )}
                         </TableCell>
-                        <TableCell className="p-[2px] text-[10px] font-bold">{renderCellContent(entry, 'machineNumber')}</TableCell>
-                        <TableCell className="p-[2px] text-[10px] font-bold">{renderCellContent(entry, 'meter')}</TableCell>
-                        <TableCell className="p-[2px] text-[10px] font-bold">{renderCellContent(entry, 'date')}</TableCell>
+                        <TableCell className="p-[2px] text-[10px] font-bold text-red-600">{renderCellContent(entry, 'machineNumber')}</TableCell>
+                        <TableCell className="p-[2px] text-[10px] font-bold text-green-600">{renderCellContent(entry, 'meter')}</TableCell>
+                        <TableCell className="p-[2px] text-[10px] font-bold text-purple-600">{renderCellContent(entry, 'date')}</TableCell>
                         <TableCell className="p-[2px] text-right">
                           {editingTaka === entry.takaNumber ? (
                             <>
