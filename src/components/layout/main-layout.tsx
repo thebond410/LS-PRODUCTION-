@@ -38,10 +38,17 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   // Initialize Supabase client
   useEffect(() => {
     if (settings.supabaseUrl && settings.supabaseKey) {
-        const client = createClient(settings.supabaseUrl, settings.supabaseKey);
-        setSupabase(client);
+        try {
+            const client = createClient(settings.supabaseUrl, settings.supabaseKey);
+            setSupabase(client);
+        } catch (e) {
+            console.error("Failed to create Supabase client", e);
+            setSupabase(null);
+            setIsOnline(false);
+        }
     } else {
         setSupabase(null);
+        setIsOnline(false);
     }
   }, [settings.supabaseUrl, settings.supabaseKey]);
 
@@ -114,19 +121,24 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     const syncData = async () => {
       setIsSyncing(true);
       try {
-        const { data: settingsData, error: settingsError } = await supabase
-          .from('app_settings')
-          .select('settings', { count: 'exact', head: true });
+        // Ping a known table first to check for connection and schema existence
+        const { error: pingError } = await supabase
+          .from('production_entries')
+          .select('takaNumber', { count: 'exact', head: true });
 
-        if (settingsError && settingsError.code === '42P01') {
+        if (pingError && pingError.code === '42P01') {
             toast({
               variant: 'destructive',
               title: 'Database Setup Required',
               description: "Tables not found. Please run the SQL script from the Settings page.",
             });
-            setIsOnline(false);
+            setIsOnline(false); // Can't sync if tables don't exist
             return;
+        } else if (pingError) {
+            throw pingError; // Other errors are connection problems
         }
+
+        setIsOnline(true); // If ping is successful, we are online
 
         const { data: remoteSettings, error: remoteSettingsError } = await supabase
           .from('app_settings')
@@ -148,7 +160,6 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'SET_DELIVERY_ENTRIES', payload: delData as DeliveryEntry[] });
 
         dispatch({ type: 'CLEAR_UNSYNCED_CHANGES' });
-        setIsOnline(true);
         toast({ title: 'Sync Successful', description: 'Data loaded from Supabase.' });
 
       } catch (error) {
@@ -166,8 +177,12 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     syncData();
 
     // --- REAL-TIME SUBSCRIPTIONS ---
+    const channels = supabase.getChannels();
+    if(productionChannelRef.current) supabase.removeChannel(productionChannelRef.current);
+    if(deliveryChannelRef.current) supabase.removeChannel(deliveryChannelRef.current);
+    if(settingsChannelRef.current) supabase.removeChannel(settingsChannelRef.current);
 
-    // Production Entries
+
     productionChannelRef.current = supabase.channel('production_entries')
       .on<ProductionEntry>('postgres_changes', { event: '*', schema: 'public', table: 'production_entries' }, (payload) => {
           if (payload.eventType === 'INSERT') {
@@ -178,9 +193,15 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
              dispatch({ type: 'DELETE_PRODUCTION_ENTRY', payload: (payload.old as { takaNumber: string }).takaNumber });
           }
         }
-      ).subscribe();
+      ).subscribe((status, err) => {
+          if(status === 'SUBSCRIPTION_ERROR' || err) {
+              console.error('Production subscription error', err);
+              setIsOnline(false);
+          } else if (status === 'SUBSCRIBED') {
+              setIsOnline(true);
+          }
+      });
 
-    // Delivery Entries
     deliveryChannelRef.current = supabase.channel('delivery_entries')
       .on<DeliveryEntry>('postgres_changes', { event: '*', schema: 'public', table: 'delivery_entries' }, (payload) => {
         if (payload.eventType === 'INSERT') {
@@ -190,41 +211,41 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         } else if (payload.eventType === 'DELETE') {
           dispatch({ type: 'DELETE_DELIVERY_ENTRY', payload: (payload.old as { id: string }).id });
         }
-      }).subscribe();
+      }).subscribe((status, err) => {
+           if(status === 'SUBSCRIPTION_ERROR' || err) {
+              console.error('Delivery subscription error', err);
+              setIsOnline(false);
+          }
+      });
     
-    // Settings
     settingsChannelRef.current = supabase.channel('app_settings')
         .on<any>('postgres_changes', {event: 'UPDATE', schema: 'public', table: 'app_settings', filter: 'id=eq.1'}, (payload) => {
             if (payload.new.settings) {
                 dispatch({type: 'UPDATE_SETTINGS_FROM_SERVER', payload: payload.new.settings as AppSettings});
                 toast({title: "Settings Updated", description: "Settings were updated from another device."});
             }
-        }).subscribe();
+        }).subscribe((status, err) => {
+           if(status === 'SUBSCRIPTION_ERROR' || err) {
+              console.error('Settings subscription error', err);
+              setIsOnline(false);
+          }
+      });
 
-
-    const connectionInterval = setInterval(async () => {
-        try {
-            const { error } = await supabase.from('production_entries').select('takaNumber', { count: 'exact', head: true });
-            
-            if (error) {
-                 if (error.message.includes("Socket closed unexpectedly") || error.message.includes("fetch failed")) {
-                    if (isOnline) setIsOnline(false);
-                 } else if (error.code !== '42P01' && isOnline) { // Don't go offline for missing table
-                    setIsOnline(false);
-                 }
-            } else {
-                if (!isOnline) {
-                    setIsOnline(true);
-                    handleSync();
-                }
-            }
-        } catch (e) {
-            if (isOnline) setIsOnline(false);
+    const handleOnline = () => {
+        setIsOnline(true);
+        if (pendingCount > 0) {
+            handleSync();
         }
-    }, 10000);
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
 
     return () => {
-      clearInterval(connectionInterval);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
       if (productionChannelRef.current) supabase.removeChannel(productionChannelRef.current);
       if (deliveryChannelRef.current) supabase.removeChannel(deliveryChannelRef.current);
       if (settingsChannelRef.current) supabase.removeChannel(settingsChannelRef.current);
