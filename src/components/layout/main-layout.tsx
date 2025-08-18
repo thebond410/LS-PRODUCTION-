@@ -22,6 +22,14 @@ const navItems = [
 ];
 
 const toSnakeCase = (obj: any) => {
+  if (typeof obj !== 'object' || obj === null) {
+    return obj;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(toSnakeCase);
+  }
+    
   const newObj: any = {};
   for (const key in obj) {
     if (Object.prototype.hasOwnProperty.call(obj, key)) {
@@ -77,11 +85,11 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         const { production, delivery } = unsyncedChanges;
 
         if (production.add.length > 0) {
-            const { error } = await supabase.from('production_entries').upsert(production.add.map(({id, ...rest}) => toSnakeCase(rest)), { onConflict: 'taka_number' });
+            const { error } = await supabase.from('production_entries').upsert(toSnakeCase(production.add), { onConflict: 'taka_number' });
             if (error) throw new Error(`Production Add: ${error.message}`);
         }
         if (production.update.length > 0) {
-            const { error } = await supabase.from('production_entries').upsert(production.update.map(toSnakeCase), { onConflict: 'taka_number' });
+            const { error } = await supabase.from('production_entries').upsert(toSnakeCase(production.update), { onConflict: 'taka_number' });
             if (error) throw new Error(`Production Update: ${error.message}`);
         }
         if (production.delete.length > 0) {
@@ -90,11 +98,11 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         }
 
         if (delivery.add.length > 0) {
-            const { error } = await supabase.from('delivery_entries').upsert(delivery.add.map(toSnakeCase), { onConflict: 'id' });
+            const { error } = await supabase.from('delivery_entries').upsert(toSnakeCase(delivery.add), { onConflict: 'id' });
             if (error) throw new Error(`Delivery Add: ${error.message}`);
         }
         if (delivery.update.length > 0) {
-            const { error } = await supabase.from('delivery_entries').upsert(delivery.update.map(toSnakeCase), { onConflict: 'id' });
+            const { error } = await supabase.from('delivery_entries').upsert(toSnakeCase(delivery.update), { onConflict: 'id' });
             if (error) throw new Error(`Delivery Update: ${error.message}`);
         }
         if (delivery.delete.length > 0) {
@@ -324,5 +332,3 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-
-    
