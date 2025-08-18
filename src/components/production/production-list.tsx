@@ -10,11 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FilePenLine, Trash2, Check, X, ArrowUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Badge } from "../ui/badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "../ui/select";
 import { ScrollArea } from "../ui/scroll-area";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 
-type SortKey = keyof ProductionEntry | '';
+type SortKey = keyof ProductionEntry | 'status' | '';
 type SortDirection = 'asc' | 'desc';
 type ViewMode = 'stock' | 'all';
 
@@ -28,15 +28,6 @@ const filterEntriesByRange = (entries: ProductionEntry[], start?: string, end?: 
     const takaNum = parseInt(entry.takaNumber, 10);
     return !isNaN(takaNum) && takaNum >= startNum && takaNum <= endNum;
   });
-};
-
-const formatShortDate = (dateString: string) => {
-  if (!dateString) return '';
-  const parts = dateString.split('/');
-  if (parts.length >= 2) {
-    return `${parts[0]}/${parts[1]}`;
-  }
-  return dateString;
 };
 
 const formatMeter = (meter: string) => {
@@ -61,14 +52,31 @@ export function ProductionList() {
   const [sortKey, setSortKey] = useState<SortKey>('takaNumber');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
-  const deliveredTakaNumbers = useMemo(() => new Set(deliveryEntries.map(d => d.takaNumber)), [deliveryEntries]);
+  const deliveryMap = useMemo(() => {
+    const map = new Map();
+    deliveryEntries.forEach(d => map.set(d.takaNumber, d));
+    return map;
+  }, [deliveryEntries]);
+
+  const allProductionWithDeliveryInfo = useMemo(() => {
+    return productionEntries.map(p => {
+        const deliveryInfo = deliveryMap.get(p.takaNumber);
+        return {
+            ...p,
+            isDelivered: !!deliveryInfo,
+            partyName: deliveryInfo?.partyName,
+            lotNumber: deliveryInfo?.lotNumber,
+            deliveryDate: deliveryInfo?.deliveryDate,
+        }
+    })
+  }, [productionEntries, deliveryMap]);
   
   const displayedEntries = useMemo(() => {
     if (viewMode === 'stock') {
-      return productionEntries.filter(p => !deliveredTakaNumbers.has(p.takaNumber));
+      return allProductionWithDeliveryInfo.filter(p => !p.isDelivered);
     }
-    return productionEntries;
-  }, [productionEntries, deliveredTakaNumbers, viewMode]);
+    return allProductionWithDeliveryInfo;
+  }, [allProductionWithDeliveryInfo, viewMode]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -112,18 +120,22 @@ export function ProductionList() {
     let entries = [...displayedEntries];
     if (sortKey) {
       entries.sort((a, b) => {
-        const aValue = a[sortKey];
-        const bValue = b[sortKey];
+        const aValue = sortKey === 'status' ? a.isDelivered : a[sortKey as keyof ProductionEntry];
+        const bValue = sortKey === 'status' ? b.isDelivered : b[sortKey as keyof ProductionEntry];
 
         if (sortKey === 'takaNumber' || sortKey === 'machineNumber' || sortKey === 'meter') {
-            const numA = parseFloat(aValue.replace(/[^0-9.]/g, '')) || 0;
-            const numB = parseFloat(bValue.replace(/[^0-9.]/g, '')) || 0;
+            const numA = parseFloat(String(aValue).replace(/[^0-9.]/g, '')) || 0;
+            const numB = parseFloat(String(bValue).replace(/[^0-9.]/g, '')) || 0;
             return (numA - numB) * (sortDirection === 'asc' ? 1 : -1);
+        }
+        
+        if(sortKey === 'status') {
+            return (aValue === bValue ? 0 : aValue ? 1 : -1) * (sortDirection === 'asc' ? 1 : -1);
         }
 
         if (sortKey === 'date') {
-            const dateA = new Date(aValue.split('/').reverse().join('-'));
-            const dateB = new Date(bValue.split('/').reverse().join('-'));
+            const dateA = new Date(String(aValue).split('/').reverse().join('-'));
+            const dateB = new Date(String(bValue).split('/').reverse().join('-'));
             if(isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
             return (dateA.getTime() - dateB.getTime()) * (sortDirection === 'asc' ? 1 : -1);
         }
@@ -141,12 +153,18 @@ export function ProductionList() {
   const allTableData = Array.from({ length: productionTables }, (_, i) => {
     const listKey = `list${i + 1}` as keyof typeof listTakaRanges;
     const range = listTakaRanges[listKey];
-    const entries = filterEntriesByRange(sortedEntries, range.start, range.end);
-    const totalMeters = entries.reduce((sum, entry) => sum + (parseFloat(entry.meter) || 0), 0);
+    const listEntries = filterEntriesByRange(sortedEntries, range.start, range.end);
+    
+    // Calculate totals based on the view mode
+    const stockEntries = listEntries.filter(e => !e.isDelivered);
+    const totalTakas = viewMode === 'stock' ? stockEntries.length : listEntries.length;
+    const totalMeters = (viewMode === 'stock' ? stockEntries : listEntries)
+        .reduce((sum, entry) => sum + (parseFloat(entry.meter) || 0), 0);
+
     return {
       title: `List ${i + 1}`,
-      entries: entries,
-      totalTakas: entries.length,
+      entries: listEntries,
+      totalTakas: totalTakas,
       totalMeters: totalMeters.toFixed(2),
     }
   });
@@ -171,7 +189,7 @@ export function ProductionList() {
       return (
         <Input
           name={field}
-          value={editedEntry[field]}
+          value={editedEntry![field]}
           onChange={handleInputChange}
           className="h-5 p-1 text-[10px] font-bold"
           disabled={field === 'takaNumber'}
@@ -179,10 +197,6 @@ export function ProductionList() {
       );
     }
     
-    if (field === 'date') {
-      return formatShortDate(entry.date);
-    }
-
     if (field === 'meter') {
         return formatMeter(entry.meter);
     }
@@ -200,6 +214,7 @@ export function ProductionList() {
   );
 
   return (
+    <TooltipProvider>
     <div className="space-y-2">
       <div className="px-2 grid grid-cols-2 gap-2">
         <Select value={selectedList} onValueChange={setSelectedList}>
@@ -235,22 +250,31 @@ export function ProductionList() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <SortableHeader sortKeyName="takaNumber" label="Taka" className="text-sky-600" />
-                        <SortableHeader sortKeyName="machineNumber" label="M/C" className="text-red-600" />
-                        <SortableHeader sortKeyName="meter" label="Meter" className="text-green-600" />
-                        <SortableHeader sortKeyName="date" label="DT" className="text-purple-600" />
-                        <TableHead className="p-[2px] text-[10px] font-bold text-right h-6">Actions</TableHead>
+                        <SortableHeader sortKeyName="takaNumber" label="Taka" className="w-[15%]" />
+                        <SortableHeader sortKeyName="meter" label="Meter" className="w-[15%]" />
+                        <TableHead className="p-[2px] text-[10px] font-bold h-6 w-[50%]">Party / Lot</TableHead>
+                        <TableHead className="p-[2px] text-[10px] font-bold text-right h-6 w-[20%]">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {data.entries.map((entry) => (
-                        <TableRow key={entry.takaNumber} className={cn("m-[2px] h-6", { 'bg-gray-200 text-gray-400': deliveredTakaNumbers.has(entry.takaNumber) })}>
-                          <TableCell className="p-[2px] text-[10px] font-bold relative text-sky-600">
-                            {renderCellContent(entry, 'takaNumber')}
+                        <TableRow key={entry.takaNumber} className={cn("m-[2px] h-6", { 'bg-red-100 text-red-700 font-bold': entry.isDelivered })}>
+                          <TableCell className="p-[2px] text-[10px] font-bold truncate max-w-0">
+                             <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span>{renderCellContent(entry, 'takaNumber')}</span>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" align="start">
+                                  <p>M/C: {entry.machineNumber}</p>
+                                  <p>Date: {entry.date}</p>
+                                   {entry.isDelivered && <p>Del. Date: {entry.deliveryDate}</p>}
+                                </TooltipContent>
+                            </Tooltip>
                           </TableCell>
-                          <TableCell className="p-[2px] text-[10px] font-bold text-red-600">{renderCellContent(entry, 'machineNumber')}</TableCell>
-                          <TableCell className="p-[2px] text-[10px] font-bold text-green-600">{renderCellContent(entry, 'meter')}</TableCell>
-                          <TableCell className="p-[2px] text-[10px] font-bold text-purple-600">{renderCellContent(entry, 'date')}</TableCell>
+                          <TableCell className="p-[2px] text-[10px] font-bold">{renderCellContent(entry, 'meter')}</TableCell>
+                           <TableCell className="p-[2px] text-[10px] font-bold truncate max-w-0">
+                           {entry.isDelivered ? `${entry.partyName} / ${entry.lotNumber}` : '-'}
+                          </TableCell>
                           <TableCell className="p-[2px] text-right">
                             {editingTaka === entry.takaNumber ? (
                               <>
@@ -281,7 +305,6 @@ export function ProductionList() {
                           <TableCell className="p-1 text-[12px] font-bold h-8">{data.totalTakas}</TableCell>
                           <TableCell className="p-1 text-[12px] font-bold h-8"></TableCell>
                           <TableCell className="p-1 text-[12px] font-bold h-8">{data.totalMeters}</TableCell>
-                          <TableCell colSpan={2}></TableCell>
                       </TableRow>
                     </TableFooter>
                   </Table>
@@ -296,5 +319,6 @@ export function ProductionList() {
         ))}
       </div>
     </div>
+    </TooltipProvider>
   );
 }
