@@ -1,37 +1,15 @@
 
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Package, Truck, BarChart, Settings, Wifi, WifiOff, Loader2, UploadCloud } from 'lucide-react';
+import { LayoutDashboard, Package, Truck, BarChart, Settings, Wifi, WifiOff, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { createClient, SupabaseClient, PostgrestError, RealtimeChannel } from '@supabase/supabase-js';
+import { PostgrestError, RealtimeChannel } from '@supabase/supabase-js';
 import { useAppContext } from '@/context/AppContext';
 import { ProductionEntry, DeliveryEntry, Settings as AppSettings } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-
-const toSnakeCase = (obj: any) => {
-    if (typeof obj !== 'object' || obj === null) {
-        return obj;
-    }
-
-    if (Array.isArray(obj)) {
-        return obj.map(toSnakeCase);
-    }
-
-    const newObj: any = {};
-    for (const key in obj) {
-        if (Object.prototype.hasOwnProperty.call(obj, key)) {
-            const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-            const value = obj[key];
-            newObj[snakeKey] = value === undefined ? null : value;
-        }
-    }
-    return newObj;
-};
 
 const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, color: 'text-blue-500' },
@@ -44,168 +22,92 @@ const navItems = [
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { state, dispatch } = useAppContext();
-  const { settings, isInitialized, unsyncedChanges } = state;
+  const { isInitialized, supabase, isOnline } = state;
   const { toast } = useToast();
   
-  const [isOnline, setIsOnline] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   
   const productionChannelRef = useRef<RealtimeChannel | null>(null);
   const deliveryChannelRef = useRef<RealtimeChannel | null>(null);
   const settingsChannelRef = useRef<RealtimeChannel | null>(null);
 
-  // Initialize Supabase client
-  useEffect(() => {
-    if (settings.supabaseUrl && settings.supabaseKey) {
-        try {
-            const client = createClient(settings.supabaseUrl, settings.supabaseKey);
-            setSupabase(client);
-        } catch (e) {
-            console.error("Failed to create Supabase client", e);
-            setSupabase(null);
-            setIsOnline(false);
-        }
-    } else {
-        setSupabase(null);
-        setIsOnline(false);
-    }
-  }, [settings.supabaseUrl, settings.supabaseKey]);
-
-  const handleSync = async () => {
-    if (!supabase || !isOnline || isSyncing) {
-        if (!isSyncing && !supabase) {
-            toast({ variant: 'destructive', title: 'Cannot Sync', description: 'Supabase is not configured.' });
-        }
-        return;
-    }
-
-    setIsSyncing(true);
-    try {
-        const { production, delivery } = unsyncedChanges;
-        
-        const cleanProductionEntry = (entry: any) => {
-            const { isDelivered, partyName, lotNumber, deliveryDate, ...rest } = entry;
-            return rest;
-        };
-
-        if (production.add.length > 0) {
-            const entriesToAdd = production.add.map(cleanProductionEntry).map(toSnakeCase);
-            const { error } = await supabase.from('production_entries').upsert(entriesToAdd, { onConflict: 'taka_number' });
-            if (error) throw new Error(`Production Add: ${error.message}`);
-        }
-        if (production.update.length > 0) {
-            const entriesToUpdate = production.update.map(cleanProductionEntry).map(toSnakeCase);
-            const { error } = await supabase.from('production_entries').upsert(entriesToUpdate, { onConflict: 'taka_number' });
-            if (error) throw new Error(`Production Update: ${error.message}`);
-        }
-        if (production.delete.length > 0) {
-            const { error } = await supabase.from('production_entries').delete().in('taka_number', production.delete);
-            if (error) throw new Error(`Production Delete: ${error.message}`);
-        }
-
-        if (delivery.add.length > 0) {
-            const { error } = await supabase.from('delivery_entries').upsert(delivery.add.map(toSnakeCase), { onConflict: 'id' });
-            if (error) throw new Error(`Delivery Add: ${error.message}`);
-        }
-        if (delivery.update.length > 0) {
-            const { error } = await supabase.from('delivery_entries').upsert(delivery.update.map(toSnakeCase), { onConflict: 'id' });
-            if (error) throw new Error(`Delivery Update: ${error.message}`);
-        }
-        if (delivery.delete.length > 0) {
-            const { error } = await supabase.from('delivery_entries').delete().in('id', delivery.delete);
-            if (error) throw new Error(`Delivery Delete: ${error.message}`);
-        }
-        
-        if (unsyncedChanges.settings) {
-            const { supabaseUrl, supabaseKey, ...settingsToStore } = settings;
-            const { error } = await supabase.from('app_settings').upsert({ id: 1, settings: settingsToStore }, { onConflict: 'id' });
-            if (error) throw new Error(`Settings: ${error.message}`);
-        }
-
-        dispatch({ type: 'CLEAR_UNSYNCED_CHANGES' });
-        toast({ title: 'Sync Complete', description: 'All local changes have been saved.' });
-
-    } catch (error) {
-        const errorMessage = (error as Error).message || 'An unknown error occurred';
-        console.error('Sync error:', errorMessage);
-        toast({ variant: 'destructive', title: 'Sync Error', description: `Failed to save data: ${errorMessage}` });
-    } finally {
-        setIsSyncing(false);
-    }
-  };
-
-
   // Effect for initial data load and setting up real-time subscriptions
   useEffect(() => {
     if (!isInitialized || !supabase) {
-        if(isInitialized && (!settings.supabaseUrl || !settings.supabaseKey)) {
-            setIsOnline(false);
+        if(isInitialized && !supabase) {
+           dispatch({ type: 'SET_ONLINE_STATUS', payload: false });
+           setIsLoading(false);
         }
         return;
     }
 
     const syncData = async () => {
-      setIsSyncing(true);
+      setIsLoading(true);
       try {
+        // Simple ping to check connection and table existence
         const { error: pingError } = await supabase
           .from('production_entries')
           .select('taka_number', { count: 'exact', head: true });
 
-        if (pingError && pingError.code === '42P01') {
+        if (pingError && pingError.code === '42P01') { // table does not exist
             toast({
               variant: 'destructive',
               title: 'Database Setup Required',
               description: "Tables not found. Please run the SQL script from the Settings page.",
             });
-            setIsOnline(false); 
+            dispatch({ type: 'SET_ONLINE_STATUS', payload: false });
             return;
         } else if (pingError) {
             throw pingError; 
         }
 
-        setIsOnline(true); 
+        dispatch({ type: 'SET_ONLINE_STATUS', payload: true });
 
-        const { data: remoteSettings, error: remoteSettingsError } = await supabase
-          .from('app_settings')
-          .select('settings')
-          .eq('id', 1)
-          .single();
-
+        // Fetch all data
+        const [
+          { data: remoteSettings, error: remoteSettingsError },
+          { data: prodData, error: prodError },
+          { data: delData, error: delError }
+        ] = await Promise.all([
+          supabase.from('app_settings').select('settings').eq('id', 1).single(),
+          supabase.from('production_entries').select('*'),
+          supabase.from('delivery_entries').select('*')
+        ]);
+        
         if (remoteSettingsError && remoteSettingsError.code !== 'PGRST116') throw remoteSettingsError;
-        if (remoteSettings?.settings) {
-          dispatch({ type: 'UPDATE_SETTINGS_FROM_SERVER', payload: remoteSettings.settings as AppSettings });
-        }
-
-        const { data: prodData, error: prodError } = await supabase.from('production_entries').select('*');
         if (prodError) throw prodError;
-        dispatch({ type: 'SET_PRODUCTION_ENTRIES', payload: prodData as ProductionEntry[] });
-
-        const { data: delData, error: delError } = await supabase.from('delivery_entries').select('*');
         if (delError) throw delError;
+
+        if (remoteSettings?.settings) {
+          const serverSettings = {
+            ...remoteSettings.settings,
+            supabaseUrl: state.settings.supabaseUrl,
+            supabaseKey: state.settings.supabaseKey,
+          };
+          dispatch({ type: 'UPDATE_SETTINGS', payload: serverSettings as AppSettings });
+        }
+        dispatch({ type: 'SET_PRODUCTION_ENTRIES', payload: prodData as ProductionEntry[] });
         dispatch({ type: 'SET_DELIVERY_ENTRIES', payload: delData as DeliveryEntry[] });
 
-        dispatch({ type: 'CLEAR_UNSYNCED_CHANGES' });
         toast({ title: 'Sync Successful', description: 'Data loaded from Supabase.' });
 
       } catch (error) {
-        setIsOnline(false);
+        dispatch({ type: 'SET_ONLINE_STATUS', payload: false });
         const errorMessage = (error as PostgrestError)?.message || (error as Error)?.message || 'An unknown error occurred during sync.';
         const errorCode = (error as PostgrestError)?.code;
-        console.error('Supabase connection error:', errorMessage);
+        console.error('Supabase connection error:', errorMessage, error);
 
-        if (errorCode !== '42P01') { 
+        if (errorCode !== '42P01') { // Don't toast for missing tables, already handled
           toast({ variant: 'destructive', title: 'Sync Failed', description: `Could not connect to Supabase. ${errorMessage}` });
         }
       } finally {
-        setIsSyncing(false);
+        setIsLoading(false);
       }
     };
     
     syncData();
 
     // --- REAL-TIME SUBSCRIPTIONS ---
-    const channels = supabase.getChannels();
     if(productionChannelRef.current) supabase.removeChannel(productionChannelRef.current);
     if(deliveryChannelRef.current) supabase.removeChannel(deliveryChannelRef.current);
     if(settingsChannelRef.current) supabase.removeChannel(settingsChannelRef.current);
@@ -214,7 +116,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     productionChannelRef.current = supabase.channel('production_entries')
       .on<ProductionEntry>('postgres_changes', { event: '*', schema: 'public', table: 'production_entries' }, (payload) => {
           if (payload.eventType === 'INSERT') {
-             dispatch({ type: 'ADD_PRODUCTION_ENTRIES', payload: [payload.new as ProductionEntry] });
+             dispatch({ type: 'ADD_PRODUCTION_ENTRY', payload: payload.new as ProductionEntry });
           } else if (payload.eventType === 'UPDATE') {
              dispatch({ type: 'UPDATE_PRODUCTION_ENTRY', payload: payload.new as ProductionEntry });
           } else if (payload.eventType === 'DELETE') {
@@ -224,9 +126,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       ).subscribe((status, err) => {
           if(status === 'SUBSCRIPTION_ERROR' || err) {
               console.error('Production subscription error', err);
-              setIsOnline(false);
+              dispatch({ type: 'SET_ONLINE_STATUS', payload: false });
           } else if (status === 'SUBSCRIBED') {
-              setIsOnline(true);
+              dispatch({ type: 'SET_ONLINE_STATUS', payload: true });
           }
       });
 
@@ -242,34 +144,33 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       }).subscribe((status, err) => {
            if(status === 'SUBSCRIPTION_ERROR' || err) {
               console.error('Delivery subscription error', err);
-              setIsOnline(false);
+              dispatch({ type: 'SET_ONLINE_STATUS', payload: false });
           }
       });
     
     settingsChannelRef.current = supabase.channel('app_settings')
         .on<any>('postgres_changes', {event: 'UPDATE', schema: 'public', table: 'app_settings', filter: 'id=eq.1'}, (payload) => {
             if (payload.new.settings) {
-                dispatch({type: 'UPDATE_SETTINGS_FROM_SERVER', payload: payload.new.settings as AppSettings});
+                const serverSettings = {
+                    ...payload.new.settings,
+                    supabaseUrl: state.settings.supabaseUrl,
+                    supabaseKey: state.settings.supabaseKey,
+                };
+                dispatch({type: 'UPDATE_SETTINGS', payload: serverSettings as AppSettings});
                 toast({title: "Settings Updated", description: "Settings were updated from another device."});
             }
         }).subscribe((status, err) => {
            if(status === 'SUBSCRIPTION_ERROR' || err) {
               console.error('Settings subscription error', err);
-              setIsOnline(false);
+              dispatch({ type: 'SET_ONLINE_STATUS', payload: false });
           }
       });
 
-    const handleOnline = () => {
-        setIsOnline(true);
-        if (pendingCount > 0) {
-            handleSync();
-        }
-    };
-    const handleOffline = () => setIsOnline(false);
+    const handleOnline = () => dispatch({ type: 'SET_ONLINE_STATUS', payload: true });
+    const handleOffline = () => dispatch({ type: 'SET_ONLINE_STATUS', payload: false });
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
 
     return () => {
       window.removeEventListener('online', handleOnline);
@@ -280,18 +181,6 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     };
   }, [isInitialized, supabase]);
 
-  const pendingCount = useMemo(() => {
-    if(!unsyncedChanges) return 0;
-    return (
-        unsyncedChanges.production.add.length +
-        unsyncedChanges.production.update.length +
-        unsyncedChanges.production.delete.length +
-        unsyncedChanges.delivery.add.length +
-        unsyncedChanges.delivery.update.length +
-        unsyncedChanges.delivery.delete.length +
-        (unsyncedChanges.settings ? 1 : 0)
-    );
-  }, [unsyncedChanges]);
 
   return (
     <div className="flex flex-col h-screen w-full bg-background md:max-w-none max-w-md mx-auto">
@@ -316,13 +205,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 })}
             </div>
             <div className='px-2 flex items-center gap-2'>
-                {pendingCount > 0 && (
-                   <Button variant="ghost" size="icon" className="h-8 w-8 relative" onClick={handleSync} disabled={isSyncing || !isOnline}>
-                     {isSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-5 w-5 text-primary" />}
-                     <Badge variant="destructive" className="absolute -top-1 -right-2 px-1.5 h-5">{pendingCount}</Badge>
-                   </Button>
-                )}
-                {isSyncing ? (
+                {isLoading ? (
                     <Loader2 className="h-5 w-5 animate-spin text-primary" title="Syncing..." />
                 ) : (
                     isOnline ? 
@@ -338,4 +221,3 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
- 

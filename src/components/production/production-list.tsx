@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useAppContext } from "@/context/AppContext";
+import { useAppContext, toSnakeCase } from "@/context/AppContext";
 import { ProductionEntry } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
@@ -13,12 +13,13 @@ import { cn } from "@/lib/utils";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useToast } from "@/hooks/use-toast";
 
 type SortKey = keyof ProductionEntry | 'status' | '';
 type SortDirection = 'asc' | 'desc';
 type ViewMode = 'stock' | 'all';
 
-const filterEntriesByRange = (entries: ProductionEntry[], start?: string, end?: string) => {
+const filterEntriesByRange = (entries: (ProductionEntry & {isDelivered?: boolean})[], start?: string, end?: string) => {
   if (!start || !end) return entries;
   const startNum = parseInt(start, 10);
   const endNum = parseInt(end, 10);
@@ -41,10 +42,11 @@ const formatMeter = (meter: string) => {
 
 export function ProductionList() {
   const { state, dispatch } = useAppContext();
-  const { settings, productionEntries, deliveryEntries } = state;
+  const { settings, productionEntries, deliveryEntries, supabase } = state;
   const { productionTables, listTakaRanges } = settings;
   const [selectedList, setSelectedList] = useState<string>("all");
   const [viewMode, setViewMode] = useState<ViewMode>('stock');
+  const { toast } = useToast();
 
   const [editingTaka, setEditingTaka] = useState<string | null>(null);
   const [editedEntry, setEditedEntry] = useState<ProductionEntry | null>(null);
@@ -97,16 +99,43 @@ export function ProductionList() {
     setEditedEntry(null);
   };
 
-  const handleSaveClick = () => {
-    if (editedEntry) {
-      dispatch({ type: 'UPDATE_PRODUCTION_ENTRY', payload: editedEntry });
-      handleCancelClick();
+  const handleSaveClick = async () => {
+    if (!editedEntry || !supabase) return;
+    
+    // Optimistic UI update
+    dispatch({ type: 'UPDATE_PRODUCTION_ENTRY', payload: editedEntry });
+    handleCancelClick();
+
+    const { error } = await supabase
+        .from('production_entries')
+        .update(toSnakeCase(editedEntry))
+        .eq('taka_number', editedEntry.takaNumber);
+
+    if (error) {
+        toast({ variant: 'destructive', title: 'Update Failed', description: error.message });
+        // Revert UI change - requires fetching old state or more complex logic
+        // For simplicity, we can just notify the user. The real-time subscription should eventually correct the state.
+    } else {
+        toast({ title: 'Success', description: `Taka ${editedEntry.takaNumber} updated.` });
     }
   };
   
-  const handleDeleteClick = (takaNumber: string) => {
+  const handleDeleteClick = async (takaNumber: string) => {
+    if (!supabase) return;
+    
     if (window.confirm(`Are you sure you want to delete Taka ${takaNumber}? This will also remove any associated delivery record.`)) {
+      // Optimistic UI update
       dispatch({ type: 'DELETE_PRODUCTION_ENTRY', payload: takaNumber });
+
+      const { error: deliveryError } = await supabase.from('delivery_entries').delete().eq('taka_number', takaNumber);
+      const { error: productionError } = await supabase.from('production_entries').delete().eq('taka_number', takaNumber);
+
+      if (productionError || deliveryError) {
+          toast({ variant: 'destructive', title: 'Delete Failed', description: productionError?.message || deliveryError?.message });
+          // Revert UI or let real-time handle it
+      } else {
+          toast({ title: 'Success', description: `Taka ${takaNumber} deleted.` });
+      }
     }
   }
 
@@ -333,6 +362,3 @@ export function ProductionList() {
     </TooltipProvider>
   );
 }
-
-
-    

@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { useAppContext } from "@/context/AppContext";
+import { useAppContext, toSnakeCase } from "@/context/AppContext";
 import { useToast } from '@/hooks/use-toast';
 import { Camera, PlusCircle, Loader2, FilePenLine, Trash2, Check, X, Upload, CircleDotDashed } from 'lucide-react';
 import { DeliveryEntry, ProductionEntry } from '@/types';
@@ -51,14 +51,13 @@ const filterEntriesByRange = (entries: ProductionEntry[], start?: string, end?: 
 
 export default function DeliveryPage() {
   const { state, dispatch } = useAppContext();
-  const { settings, productionEntries, deliveryEntries } = state;
+  const { settings, productionEntries, deliveryEntries, supabase } = state;
   const { listTakaRanges } = settings;
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editedEntry, setEditedEntry] = useState<DeliveryEntry | null>(null);
@@ -94,7 +93,6 @@ export default function DeliveryPage() {
       };
       getCameraPermission();
     } else {
-      // Stop camera stream when dialog closes
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
@@ -119,7 +117,7 @@ export default function DeliveryPage() {
       const { valid, error, machineNumber } = validateDeliveryData(entry);
       if (!valid || !machineNumber) {
         toast({ variant: 'destructive', title: 'Validation Error', description: error });
-        return; 
+        return;
       }
       entriesToAdd.push({ ...entry, machineNumber });
     }
@@ -151,10 +149,12 @@ export default function DeliveryPage() {
       });
     } finally {
       setIsLoading(false);
-      // Only close dialog for multi-entry or file upload
-      const extractedEntriesCount = (await extractDeliveryData({ photoDataUri: base64Data }))?.entries?.length || 0;
-      if (extractedEntriesCount > 1 || fileInputRef.current?.value) {
-        setIsCameraDialogOpen(false);
+      // Close dialog only for multi-entry or file upload cases, or if single scan is successful
+      if (
+        (await extractDeliveryData({ photoDataUri: base64Data }).then(r => r.entries.length).catch(() => 0)) > 1 ||
+        fileInputRef.current?.value
+      ) {
+         setIsCameraDialogOpen(false);
       }
     }
   };
@@ -185,11 +185,13 @@ export default function DeliveryPage() {
       toast({ variant: "destructive", title: "File Error", description: "Could not read file." });
     };
     if (fileInputRef.current) fileInputRef.current.value = '';
-     setIsCameraDialogOpen(false);
+    setIsCameraDialogOpen(false);
   };
 
 
-  const addDeliveryEntry = (data: Omit<DeliveryFormData, 'partyName'|'lotNumber'> & { machineNumber: string }, tpNumber?: number) => {
+  const addDeliveryEntry = async (data: Omit<DeliveryFormData, 'partyName'|'lotNumber'> & { machineNumber: string }, tpNumber?: number) => {
+    if (!supabase) return;
+
     const currentPartyName = getValues('partyName');
     const currentLotNumber = getValues('lotNumber');
     
@@ -205,9 +207,17 @@ export default function DeliveryPage() {
     };
 
     dispatch({ type: 'ADD_DELIVERY_ENTRY', payload: newDeliveryEntry });
+
+    const { error } = await supabase.from('delivery_entries').insert(toSnakeCase(newDeliveryEntry));
+    if (error) {
+        toast({ variant: 'destructive', title: 'Save Failed', description: error.message });
+        dispatch({ type: 'DELETE_DELIVERY_ENTRY', payload: newDeliveryEntry.id });
+    }
   };
   
-  const addMultipleDeliveryEntries = (entries: (Omit<DeliveryFormData, 'partyName'|'lotNumber'> & { machineNumber: string })[]) => {
+  const addMultipleDeliveryEntries = async (entries: (Omit<DeliveryFormData, 'partyName'|'lotNumber'> & { machineNumber: string })[]) => {
+    if (!supabase) return;
+
     const currentPartyName = getValues('partyName');
     const currentLotNumber = getValues('lotNumber');
     let tpNumber: number | undefined = undefined;
@@ -229,6 +239,12 @@ export default function DeliveryPage() {
     }));
     
     dispatch({ type: 'ADD_DELIVERY_ENTRIES', payload: newEntries });
+    
+    const { error } = await supabase.from('delivery_entries').insert(newEntries.map(toSnakeCase));
+    if (error) {
+        toast({ variant: 'destructive', title: 'Save Failed', description: error.message });
+        newEntries.forEach(entry => dispatch({ type: 'DELETE_DELIVERY_ENTRY', payload: entry.id }));
+    }
   }
 
   const validateDeliveryData = (entry: { takaNumber: string, meter: string }): { valid: boolean, error?: string, machineNumber?: string } => {
@@ -277,16 +293,36 @@ export default function DeliveryPage() {
     setEditedEntry(null);
   };
 
-  const handleSaveClick = () => {
-    if (editedEntry) {
-      dispatch({ type: 'UPDATE_DELIVERY_ENTRY', payload: editedEntry });
-      handleCancelClick();
+  const handleSaveClick = async () => {
+    if (!editedEntry || !supabase) return;
+    
+    const originalEntry = deliveryEntries.find(d => d.id === editedEntry.id);
+    dispatch({ type: 'UPDATE_DELIVERY_ENTRY', payload: editedEntry });
+    handleCancelClick();
+
+    const { error } = await supabase.from('delivery_entries').update(toSnakeCase(editedEntry)).eq('id', editedEntry.id);
+    if (error) {
+        toast({ variant: 'destructive', title: 'Update Failed', description: error.message });
+        if(originalEntry) dispatch({ type: 'UPDATE_DELIVERY_ENTRY', payload: originalEntry });
+    } else {
+        toast({ title: 'Success', description: `Entry updated.` });
     }
   };
 
-  const handleDeleteClick = (id: string) => {
+  const handleDeleteClick = async (id: string) => {
+    if (!supabase) return;
+    
     if (window.confirm('Are you sure you want to delete this entry?')) {
+      const originalEntry = deliveryEntries.find(d => d.id === id);
       dispatch({ type: 'DELETE_DELIVERY_ENTRY', payload: id });
+
+      const { error } = await supabase.from('delivery_entries').delete().eq('id', id);
+      if (error) {
+          toast({ variant: 'destructive', title: 'Delete Failed', description: error.message });
+          if(originalEntry) dispatch({ type: 'ADD_DELIVERY_ENTRY', payload: originalEntry });
+      } else {
+          toast({ title: 'Success', description: 'Entry deleted.'});
+      }
     }
   };
 

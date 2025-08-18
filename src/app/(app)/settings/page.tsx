@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { useAppContext } from "@/context/AppContext";
+import { useAppContext, toSnakeCase } from "@/context/AppContext";
 import { useToast } from '@/hooks/use-toast';
 import { Settings as SettingsType } from '@/types';
 import { useEffect } from 'react';
@@ -40,8 +40,7 @@ CREATE TABLE app_settings (
 
 -- Table to store production entries
 CREATE TABLE production_entries (
-  id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  taka_number TEXT NOT NULL UNIQUE,
+  taka_number TEXT PRIMARY KEY NOT NULL,
   machine_number TEXT,
   meter TEXT,
   date TEXT, -- Storing as TEXT to match app logic
@@ -58,30 +57,46 @@ CREATE TABLE delivery_entries (
   meter TEXT,
   machine_number TEXT,
   tp_number INT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT fk_taka_number
+      FOREIGN KEY(taka_number) 
+	  REFERENCES production_entries(taka_number)
+	  ON DELETE CASCADE
 );`;
 
 export default function SettingsPage() {
   const { state, dispatch } = useAppContext();
   const { toast } = useToast();
+  const { settings, supabase } = state;
 
   const form = useForm<SettingsType>({
     resolver: zodResolver(settingsSchema),
-    // We use defaultValues to initialize the form with the state
-    defaultValues: state.settings,
+    defaultValues: settings,
   });
   
-  // Use useEffect to reset the form when the state changes.
-  // This is important because the state might be initialized after the component mounts.
   useEffect(() => {
-    form.reset(state.settings);
-  }, [state.settings, form.reset]);
+    form.reset(settings);
+  }, [settings, form.reset]);
   
   const productionTables = form.watch('productionTables');
 
-  const onSubmit: SubmitHandler<SettingsType> = (data) => {
+  const onSubmit: SubmitHandler<SettingsType> = async (data) => {
     dispatch({ type: 'UPDATE_SETTINGS', payload: data });
-    toast({ title: 'Success', description: 'Settings have been saved.' });
+
+    if(supabase) {
+        const { supabaseUrl, supabaseKey, ...settingsToStore } = data;
+        const { error } = await supabase
+            .from('app_settings')
+            .upsert({ id: 1, settings: settingsToStore }, { onConflict: 'id' });
+
+        if (error) {
+            toast({ variant: 'destructive', title: 'Save Failed', description: error.message });
+        } else {
+            toast({ title: 'Success', description: 'Settings have been saved.' });
+        }
+    } else {
+         toast({ title: 'Saved Locally', description: 'Settings saved locally. Connect to internet to sync.' });
+    }
   };
 
   return (

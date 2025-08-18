@@ -4,7 +4,7 @@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { useAppContext } from "@/context/AppContext";
+import { useAppContext, toSnakeCase } from "@/context/AppContext";
 import { useToast } from "@/hooks/use-toast";
 import type { ProductionEntry } from "@/types";
 
@@ -16,32 +16,47 @@ interface ConfirmationModalProps {
 
 export function ConfirmationModal({ isOpen, onOpenChange, data }: ConfirmationModalProps) {
   const { state, dispatch } = useAppContext();
-  const { settings } = state;
+  const { settings, supabase } = state;
   const { toast } = useToast();
 
-  const handleConfirm = () => {
-    if (data) {
-      const validEntries: ProductionEntry[] = [];
-      const invalidEntries: string[] = [];
-      
-      data.forEach(entry => {
-        const machineNum = parseInt(entry.machineNumber, 10);
-        if (isNaN(machineNum) || machineNum > settings.maxMachineNumber) {
-          invalidEntries.push(`Taka ${entry.takaNumber} (Machine ${entry.machineNumber})`);
-        } else {
-          validEntries.push(entry);
-        }
+  const handleConfirm = async () => {
+    if (!data || !supabase) {
+       toast({ variant: "destructive", title: "Error", description: "No data or Supabase client available." });
+       onOpenChange(false);
+       return;
+    }
+
+    const validEntries: ProductionEntry[] = [];
+    const invalidEntries: string[] = [];
+    
+    data.forEach(entry => {
+      const machineNum = parseInt(entry.machineNumber, 10);
+      if (isNaN(machineNum) || machineNum > settings.maxMachineNumber) {
+        invalidEntries.push(`Taka ${entry.takaNumber} (Machine ${entry.machineNumber})`);
+      } else {
+        validEntries.push(entry);
+      }
+    });
+    
+    if (invalidEntries.length > 0) {
+      toast({
+        variant: "destructive",
+        title: "Invalid Machine Number",
+        description: `The following entries have machine numbers exceeding the maximum of ${settings.maxMachineNumber}: ${invalidEntries.join(', ')}`,
       });
-      
-      if (invalidEntries.length > 0) {
+    }
+
+    if (validEntries.length > 0) {
+      const entriesToInsert = validEntries.map(e => toSnakeCase(e));
+      const { error } = await supabase.from('production_entries').upsert(entriesToInsert, { onConflict: 'taka_number' });
+
+      if (error) {
         toast({
           variant: "destructive",
-          title: "Invalid Machine Number",
-          description: `The following entries have machine numbers exceeding the maximum of ${settings.maxMachineNumber}: ${invalidEntries.join(', ')}`,
+          title: "Database Error",
+          description: `Could not save entries: ${error.message}`,
         });
-      }
-
-      if (validEntries.length > 0) {
+      } else {
         dispatch({ type: 'ADD_PRODUCTION_ENTRIES', payload: validEntries });
         toast({
           title: "Success",
@@ -49,6 +64,7 @@ export function ConfirmationModal({ isOpen, onOpenChange, data }: ConfirmationMo
         });
       }
     }
+    
     onOpenChange(false);
   };
 
