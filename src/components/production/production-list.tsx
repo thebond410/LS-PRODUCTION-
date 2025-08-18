@@ -204,12 +204,13 @@ export function ProductionList() {
     return entry[field];
   };
   
-  const SortableHeader = ({ sortKeyName, label, className }: { sortKeyName: SortKey, label: string, className?: string }) => (
-    <TableHead className={cn("p-[2px] text-[10px] font-bold h-6 cursor-pointer", className)} onClick={() => handleSort(sortKeyName)}>
+  const SortableHeader = ({ sortKeyName, label, count, className }: { sortKeyName: SortKey, label: string, count?: number, className?: string }) => (
+    <TableHead className={cn("p-[2px] text-[10px] font-bold h-auto cursor-pointer", className)} onClick={() => handleSort(sortKeyName)}>
         <div className="flex items-center">
             {label}
             {sortKey === sortKeyName && <ArrowUpDown className="ml-1 h-3 w-3" />}
         </div>
+        {count !== undefined && <div className="text-xs font-bold text-primary">{count}</div>}
     </TableHead>
   );
 
@@ -249,11 +250,11 @@ export function ProductionList() {
                 <ScrollArea className="h-[calc(100vh-250px)]">
                   <Table>
                     <TableHeader>
-                      <TableRow>
-                        <SortableHeader sortKeyName="takaNumber" label="Taka" className="w-[15%]" />
+                      <TableRow className="h-auto">
+                        <SortableHeader sortKeyName="takaNumber" label="Taka" count={data.totalTakas} className="w-[15%]" />
                         <SortableHeader sortKeyName="meter" label="Meter" className="w-[15%]" />
-                        <TableHead className="p-[2px] text-[10px] font-bold h-6 w-[50%]">Party / Lot</TableHead>
-                        <TableHead className="p-[2px] text-[10px] font-bold text-right h-6 w-[20%]">Actions</TableHead>
+                        <TableHead className="p-[2px] text-[10px] font-bold h-auto w-[50%]">Party / Lot</TableHead>
+                        <TableHead className="p-[2px] text-[10px] font-bold text-right h-auto w-[20%]">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -301,10 +302,8 @@ export function ProductionList() {
                     </TableBody>
                     <TableFooter>
                       <TableRow>
-                          <TableCell className="p-1 text-[12px] font-bold h-8">Total</TableCell>
-                          <TableCell className="p-1 text-[12px] font-bold h-8">{data.totalTakas}</TableCell>
-                          <TableCell className="p-1 text-[12px] font-bold h-8"></TableCell>
-                          <TableCell className="p-1 text-[12px] font-bold h-8">{data.totalMeters}</TableCell>
+                          <TableCell className="p-1 text-[12px] font-bold h-8" colSpan={3}>Total Meters</TableCell>
+                          <TableCell className="p-1 text-[12px] font-bold h-8 text-right">{data.totalMeters}</TableCell>
                       </TableRow>
                     </TableFooter>
                   </Table>

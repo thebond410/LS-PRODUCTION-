@@ -151,7 +151,11 @@ export default function DeliveryPage() {
       });
     } finally {
       setIsLoading(false);
-      setIsCameraDialogOpen(false);
+      // Only close dialog for multi-entry or file upload
+      const extractedEntriesCount = (await extractDeliveryData({ photoDataUri: base64Data }))?.entries?.length || 0;
+      if (extractedEntriesCount > 1 || fileInputRef.current?.value) {
+        setIsCameraDialogOpen(false);
+      }
     }
   };
 
@@ -181,6 +185,7 @@ export default function DeliveryPage() {
       toast({ variant: "destructive", title: "File Error", description: "Could not read file." });
     };
     if (fileInputRef.current) fileInputRef.current.value = '';
+     setIsCameraDialogOpen(false);
   };
 
 
@@ -438,7 +443,10 @@ export default function DeliveryPage() {
             <TableHeader>
               <TableRow>
                 <TableHead className="p-1 text-[10px] font-bold h-7">Date</TableHead>
-                <TableHead className="p-1 text-[10px] font-bold h-7">Taka</TableHead>
+                <TableHead className="p-1 text-[10px] font-bold h-auto">
+                    <div>Taka</div>
+                    <div className="text-xs text-primary font-bold">{totalTakas}</div>
+                </TableHead>
                 <TableHead className="p-1 text-[10px] font-bold h-7">M/C</TableHead>
                 <TableHead className="p-1 text-[10px] font-bold h-7">Meter</TableHead>
                 <TableHead className="p-1 text-[10px] font-bold h-7">Party</TableHead>
@@ -481,9 +489,7 @@ export default function DeliveryPage() {
             </TableBody>
             <TableFooter>
                 <TableRow>
-                    <TableCell className="p-1 text-[12px] font-bold h-8">Total</TableCell>
-                    <TableCell className="p-1 text-[12px] font-bold h-8">{totalTakas}</TableCell>
-                    <TableCell className="p-1 text-[12px] font-bold h-8"></TableCell>
+                    <TableCell className="p-1 text-[12px] font-bold h-8" colSpan={3}>Total Meters</TableCell>
                     <TableCell className="p-1 text-[12px] font-bold h-8">{totalMeters}</TableCell>
                     <TableCell colSpan={3}></TableCell>
                 </TableRow>
@@ -498,5 +504,3 @@ export default function DeliveryPage() {
     </div>
   );
 }
-
-    

@@ -39,11 +39,19 @@ export default function ReportPage() {
       return;
     }
 
-    let filteredData: (ProductionEntry | DeliveryEntry)[] = [];
+    let filteredData: (ProductionEntry | DeliveryEntry | (ProductionEntry & {deliveryDate?: string; partyName?: string; lotNumber?: string}))[] = [];
     const deliveredTakaNumbers = new Set(deliveryEntries.map(d => d.takaNumber));
 
     if (reportType === 'production') {
-      filteredData = productionEntries;
+      filteredData = productionEntries.map(p => {
+          const delivery = deliveryEntries.find(d => d.takaNumber === p.takaNumber);
+          return {
+              ...p,
+              deliveryDate: delivery?.deliveryDate,
+              partyName: delivery?.partyName,
+              lotNumber: delivery?.lotNumber,
+          };
+      });
     } else if (reportType === 'delivery') {
       filteredData = deliveryEntries;
     } else if (reportType === 'stock') {
@@ -79,32 +87,40 @@ export default function ReportPage() {
     setGeneratedReport({ type: reportType, data: filteredData, totalTakas, totalMeters });
   };
 
-  const renderProductionReport = (data: ProductionEntry[], totalTakas: number, totalMeters: string) => (
+  const renderProductionReport = (data: (ProductionEntry & {deliveryDate?: string; partyName?: string; lotNumber?: string})[], totalTakas: number, totalMeters: string) => (
     <Table>
       <TableHeader>
-        <TableRow>
-          <TableHead className="font-bold text-sky-600">Taka No.</TableHead>
-          <TableHead className="font-bold text-red-600">Machine</TableHead>
-          <TableHead className="font-bold text-green-600">Meter</TableHead>
-          <TableHead className="font-bold text-purple-600">Date</TableHead>
+        <TableRow className="h-auto">
+          <TableHead className="p-1 font-bold h-auto text-xs">P.Date</TableHead>
+          <TableHead className="p-1 font-bold h-auto text-xs">
+              <div>Taka</div>
+              <div className="text-primary font-bold">{totalTakas}</div>
+          </TableHead>
+          <TableHead className="p-1 font-bold h-auto text-xs">M/C</TableHead>
+          <TableHead className="p-1 font-bold h-auto text-xs">Meter</TableHead>
+          <TableHead className="p-1 font-bold h-auto text-xs">D.Date</TableHead>
+          <TableHead className="p-1 font-bold h-auto text-xs">Party</TableHead>
+          <TableHead className="p-1 font-bold h-auto text-xs">Lot</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {data.map((entry, index) => (
-          <TableRow key={index}>
-            <TableCell>{entry.takaNumber}</TableCell>
-            <TableCell>{entry.machineNumber}</TableCell>
-            <TableCell>{entry.meter}</TableCell>
-            <TableCell>{entry.date}</TableCell>
+          <TableRow key={index} className="h-6">
+            <TableCell className="p-1 text-xs">{entry.date}</TableCell>
+            <TableCell className="p-1 text-xs font-bold">{entry.takaNumber}</TableCell>
+            <TableCell className="p-1 text-xs">{entry.machineNumber}</TableCell>
+            <TableCell className="p-1 text-xs font-bold">{entry.meter}</TableCell>
+            <TableCell className="p-1 text-xs">{entry.deliveryDate || '-'}</TableCell>
+            <TableCell className="p-1 text-xs truncate max-w-[60px]">{entry.partyName || '-'}</TableCell>
+            <TableCell className="p-1 text-xs">{entry.lotNumber || '-'}</TableCell>
           </TableRow>
         ))}
       </TableBody>
       <TableFooter>
         <TableRow>
-          <TableCell className="font-bold">Total</TableCell>
-          <TableCell></TableCell>
+          <TableCell className="font-bold" colSpan={3}>Total Meters</TableCell>
           <TableCell className="font-bold">{totalMeters}</TableCell>
-          <TableCell className="font-bold">{totalTakas}</TableCell>
+          <TableCell colSpan={3}></TableCell>
         </TableRow>
       </TableFooter>
     </Table>
@@ -113,29 +129,31 @@ export default function ReportPage() {
   const renderDeliveryReport = (data: DeliveryEntry[], totalTakas: number, totalMeters: string) => (
      <Table>
       <TableHeader>
-        <TableRow>
-          <TableHead className="font-bold text-purple-600">Date</TableHead>
-          <TableHead className="font-bold text-sky-600">Taka No.</TableHead>
-          <TableHead className="font-bold text-green-600">Meter</TableHead>
-          <TableHead className="font-bold text-blue-600">Party</TableHead>
-          <TableHead className="font-bold text-orange-600">Lot</TableHead>
+        <TableRow className="h-auto">
+          <TableHead className="p-1 font-bold h-auto text-xs">Date</TableHead>
+          <TableHead className="p-1 font-bold h-auto text-xs">
+              <div>Taka</div>
+              <div className="text-primary font-bold">{totalTakas}</div>
+          </TableHead>
+          <TableHead className="p-1 font-bold h-auto text-xs">Meter</TableHead>
+          <TableHead className="p-1 font-bold h-auto text-xs">Party</TableHead>
+          <TableHead className="p-1 font-bold h-auto text-xs">Lot</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {data.map((entry) => (
-          <TableRow key={entry.id}>
-            <TableCell>{entry.deliveryDate}</TableCell>
-            <TableCell>{entry.takaNumber}</TableCell>
-            <TableCell>{entry.meter}</TableCell>
-            <TableCell>{entry.partyName}</TableCell>
-            <TableCell>{entry.lotNumber}</TableCell>
+          <TableRow key={entry.id} className="h-6">
+            <TableCell className="p-1 text-xs">{entry.deliveryDate}</TableCell>
+            <TableCell className="p-1 text-xs font-bold">{entry.takaNumber}</TableCell>
+            <TableCell className="p-1 text-xs font-bold">{entry.meter}</TableCell>
+            <TableCell className="p-1 text-xs truncate max-w-[80px]">{entry.partyName}</TableCell>
+            <TableCell className="p-1 text-xs">{entry.lotNumber}</TableCell>
           </TableRow>
         ))}
       </TableBody>
        <TableFooter>
         <TableRow>
-          <TableCell className="font-bold">Total</TableCell>
-          <TableCell className="font-bold">{totalTakas}</TableCell>
+          <TableCell className="font-bold" colSpan={2}>Total Meters</TableCell>
           <TableCell className="font-bold">{totalMeters}</TableCell>
           <TableCell colSpan={2}></TableCell>
         </TableRow>
@@ -146,29 +164,31 @@ export default function ReportPage() {
   const renderStockReport = (data: ProductionEntry[], totalTakas: number, totalMeters: string) => (
      <Table>
       <TableHeader>
-        <TableRow>
-          <TableHead className="font-bold text-sky-600">Taka No.</TableHead>
-          <TableHead className="font-bold text-red-600">Machine</TableHead>
-          <TableHead className="font-bold text-green-600">Meter</TableHead>
-          <TableHead className="font-bold text-purple-600">Date</TableHead>
+        <TableRow className="h-auto">
+           <TableHead className="p-1 font-bold h-auto text-xs">
+              <div>Taka</div>
+              <div className="text-primary font-bold">{totalTakas}</div>
+          </TableHead>
+          <TableHead className="p-1 font-bold h-auto text-xs">Machine</TableHead>
+          <TableHead className="p-1 font-bold h-auto text-xs">Meter</TableHead>
+          <TableHead className="p-1 font-bold h-auto text-xs">Date</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {data.map((entry, index) => (
-          <TableRow key={index}>
-            <TableCell>{entry.takaNumber}</TableCell>
-            <TableCell>{entry.machineNumber}</TableCell>
-            <TableCell>{entry.meter}</TableCell>
-            <TableCell>{entry.date}</TableCell>
+          <TableRow key={index} className="h-6">
+            <TableCell className="p-1 text-xs font-bold">{entry.takaNumber}</TableCell>
+            <TableCell className="p-1 text-xs">{entry.machineNumber}</TableCell>
+            <TableCell className="p-1 text-xs font-bold">{entry.meter}</TableCell>
+            <TableCell className="p-1 text-xs">{entry.date}</TableCell>
           </TableRow>
         ))}
       </TableBody>
        <TableFooter>
         <TableRow>
-          <TableCell className="font-bold">Total</TableCell>
-          <TableCell></TableCell>
+          <TableCell className="font-bold" colSpan={2}>Total Meters</TableCell>
           <TableCell className="font-bold">{totalMeters}</TableCell>
-          <TableCell className="font-bold">{totalTakas}</TableCell>
+          <TableCell></TableCell>
         </TableRow>
       </TableFooter>
     </Table>
@@ -257,7 +277,7 @@ export default function ReportPage() {
            {generatedReport ? (
              generatedReport.data.length > 0 ? (
                 <ScrollArea className="h-[calc(100vh-280px)]">
-                    {generatedReport.type === 'production' && renderProductionReport(generatedReport.data as ProductionEntry[], generatedReport.totalTakas, generatedReport.totalMeters)}
+                    {generatedReport.type === 'production' && renderProductionReport(generatedReport.data as (ProductionEntry & {deliveryDate?: string; partyName?: string; lotNumber?: string})[], generatedReport.totalTakas, generatedReport.totalMeters)}
                     {generatedReport.type === 'delivery' && renderDeliveryReport(generatedReport.data as DeliveryEntry[], generatedReport.totalTakas, generatedReport.totalMeters)}
                     {generatedReport.type === 'stock' && renderStockReport(generatedReport.data as ProductionEntry[], generatedReport.totalTakas, generatedReport.totalMeters)}
                 </ScrollArea>
