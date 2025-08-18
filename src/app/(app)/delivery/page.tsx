@@ -334,11 +334,10 @@ export default function DeliveryPage() {
 
 
   return (
-    <div className="space-y-2">
-       <header className="px-2 pt-2 flex items-center justify-between">
+    <div className="space-y-1">
+       <header className="px-2 pt-1 flex items-center justify-between">
         <div className="flex items-center gap-2">
             <h1 className="text-sm font-bold text-gray-800">Delivery</h1>
-            <p className="text-muted-foreground text-sm hidden md:block">Record new deliveries.</p>
         </div>
         <div className="w-32">
             <Select value={selectedList} onValueChange={setSelectedList}>
@@ -443,29 +442,29 @@ export default function DeliveryPage() {
         </CardHeader>
         <CardContent className="p-0">
           {deliveryEntries.length > 0 ? (
-          <ScrollArea className="h-[calc(100vh-350px)]">
+          <ScrollArea className="h-[calc(100vh-320px)]">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="p-1 text-[12px] font-bold h-8">Date</TableHead>
-                <TableHead className="p-1 text-[12px] font-bold h-8">Taka</TableHead>
-                <TableHead className="p-1 text-[12px] font-bold h-8">M/C</TableHead>
-                <TableHead className="p-1 text-[12px] font-bold h-8">Meter</TableHead>
-                <TableHead className="p-1 text-[12px] font-bold h-8">Party</TableHead>
-                <TableHead className="p-1 text-[12px] font-bold h-8">Lot</TableHead>
-                <TableHead className="p-1 text-[12px] font-bold h-8 text-right">Actions</TableHead>
+                <TableHead className="p-1 text-[10px] font-bold h-7">Date</TableHead>
+                <TableHead className="p-1 text-[10px] font-bold h-7">Taka</TableHead>
+                <TableHead className="p-1 text-[10px] font-bold h-7">M/C</TableHead>
+                <TableHead className="p-1 text-[10px] font-bold h-7">Meter</TableHead>
+                <TableHead className="p-1 text-[10px] font-bold h-7">Party</TableHead>
+                <TableHead className="p-1 text-[10px] font-bold h-7">Lot</TableHead>
+                <TableHead className="p-1 text-[10px] font-bold h-7 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {[...deliveryEntries].sort((a, b) => new Date(b.deliveryDate.split('/').reverse().join('-')).getTime() - new Date(a.deliveryDate.split('/').reverse().join('-')).getTime() || (b.tpNumber || 0) - (a.tpNumber || 0) || parseInt(b.takaNumber) - parseInt(a.takaNumber)).map((entry) => (
                 <TableRow key={entry.id}>
-                  <TableCell className="p-1 text-[11px] font-bold truncate max-w-[40px]">{renderCellContent(entry, 'deliveryDate')}</TableCell>
-                  <TableCell className="p-1 text-[11px] font-bold">{renderCellContent(entry, 'takaNumber')}</TableCell>
-                  <TableCell className="p-1 text-[11px] font-bold">{renderCellContent(entry, 'machineNumber')}</TableCell>
-                  <TableCell className="p-1 text-[11px] font-bold">{renderCellContent(entry, 'meter')}</TableCell>
-                  <TableCell className="p-1 text-[11px] font-bold truncate max-w-[60px]">{renderCellContent(entry, 'partyName')}</TableCell>
-                  <TableCell className="p-1 text-[11px] font-bold">{renderCellContent(entry, 'lotNumber')}</TableCell>
-                  <TableCell className="p-1 text-[11px] font-bold text-right">
+                  <TableCell className="p-1 text-[10px] font-bold truncate max-w-[35px]">{renderCellContent(entry, 'deliveryDate')}</TableCell>
+                  <TableCell className="p-1 text-[10px] font-bold">{renderCellContent(entry, 'takaNumber')}</TableCell>
+                  <TableCell className="p-1 text-[10px] font-bold">{renderCellContent(entry, 'machineNumber')}</TableCell>
+                  <TableCell className="p-1 text-[10px] font-bold">{renderCellContent(entry, 'meter')}</TableCell>
+                  <TableCell className="p-1 text-[10px] font-bold truncate max-w-[50px]">{renderCellContent(entry, 'partyName')}</TableCell>
+                  <TableCell className="p-1 text-[10px] font-bold">{renderCellContent(entry, 'lotNumber')}</TableCell>
+                  <TableCell className="p-1 text-[10px] font-bold text-right">
                     {editingId === entry.id ? (
                       <>
                         <Button variant="ghost" size="icon" className="h-5 w-5 text-green-600" onClick={handleSaveClick}>
