@@ -2,17 +2,23 @@
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Camera, Upload, Loader2, CircleDotDashed } from 'lucide-react';
+import { Camera, Upload, Loader2, CircleDotDashed, MoreVertical } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { extractProductionData } from '@/ai/flows/extract-production-data-from-image';
 import { ProductionEntry } from '@/types';
 import { ConfirmationModal } from './confirmation-modal';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-export function AddEntryDialog() {
-  const [open, setOpen] = useState(false);
+export function ProductionEntryOptions() {
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [extractedData, setExtractedData] = useState<ProductionEntry[] | null>(null);
   const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
@@ -24,7 +30,7 @@ export function AddEntryDialog() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (open) {
+    if (isCameraOpen) {
       const getCameraPermission = async () => {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
@@ -45,7 +51,7 @@ export function AddEntryDialog() {
         videoRef.current.srcObject = null;
       }
     }
-  }, [open]);
+  }, [isCameraOpen]);
 
   const handleDataExtraction = async (base64Data: string) => {
     setIsLoading(true);
@@ -71,7 +77,7 @@ export function AddEntryDialog() {
         });
     } finally {
       setIsLoading(false);
-      setOpen(false);
+      setIsCameraOpen(false);
     }
   };
 
@@ -90,7 +96,6 @@ export function AddEntryDialog() {
     }
   };
 
-
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -103,13 +108,37 @@ export function AddEntryDialog() {
     };
      if (fileInputRef.current) fileInputRef.current.value = '';
   };
+  
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  }
 
   return (
     <>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
           <Button>Add Entry</Button>
-        </DialogTrigger>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => setIsCameraOpen(true)}>
+            <Camera className="mr-2 h-4 w-4" />
+            <span>Scan with Camera</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleUploadClick}>
+            <Upload className="mr-2 h-4 w-4" />
+            <span>Upload from File</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <input
+        type="file"
+        ref={fileInputRef}
+        className="sr-only"
+        accept="image/*"
+        onChange={handleFileChange}
+      />
+
+      <Dialog open={isCameraOpen} onOpenChange={setIsCameraOpen}>
         <DialogContent className="max-w-full w-full h-full sm:max-w-md sm:h-auto p-0">
           <div className="flex flex-col h-full">
             <DialogHeader className="p-4 border-b">
@@ -132,13 +161,9 @@ export function AddEntryDialog() {
                 </div>
               )}
             </div>
-            <div className="p-4 border-t grid grid-cols-2 gap-2">
-                <Button onClick={handleCapture} disabled={!hasCameraPermission || isLoading}>
+            <div className="p-4 border-t">
+                <Button onClick={handleCapture} disabled={!hasCameraPermission || isLoading} className="w-full">
                     <CircleDotDashed className="mr-2" /> Capture
-                </Button>
-                <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={isLoading}>
-                    <Upload className="mr-2" /> Upload
-                    <input ref={fileInputRef} type="file" className="sr-only" accept="image/*" onChange={handleFileChange} />
                 </Button>
             </div>
           </div>

@@ -1,4 +1,4 @@
-import { AddEntryDialog } from "@/components/production/add-entry-dialog";
+import { ProductionEntryOptions } from "@/components/production/production-entry-options";
 import { ProductionList } from "@/components/production/production-list";
 
 export default function ProductionPage() {
@@ -8,7 +8,7 @@ export default function ProductionPage() {
         <div>
           <h1 className="text-sm font-bold text-gray-800">Production</h1>
         </div>
-        <AddEntryDialog />
+        <ProductionEntryOptions />
       </header>
       <ProductionList />
     </div>
