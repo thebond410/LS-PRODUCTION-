@@ -1,0 +1,29 @@
+name: Auto Push to GitHub
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0 # Fetch all history for accurate pushing
+
+    - name: Set Git user
+      run: |
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+    - name: Add and commit changes
+      run: |
+        git add .
+        git commit -am "Automated push via GitHub Actions" || true # Allow no changes to commit
+
+    - name: Push changes
+      run: git push origin main
