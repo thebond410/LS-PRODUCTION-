@@ -124,11 +124,12 @@ export default function DeliveryPage() {
 
     if(entriesToAdd.length === 1) {
       addDeliveryEntry(entriesToAdd[0]);
+       toast({ title: 'Scan Successful', description: `1 entry extracted and added.` });
     } else if (entriesToAdd.length > 1) {
       addMultipleDeliveryEntries(entriesToAdd);
+       toast({ title: 'Scan Successful', description: `${result.entries.length} entries extracted and added.` });
     }
     
-    toast({ title: 'Scan Successful', description: `${result.entries.length} entries extracted and added.` });
     const currentPartyName = getValues('partyName');
     const currentLotNumber = getValues('lotNumber');
     reset({ partyName: currentPartyName, lotNumber: currentLotNumber, takaNumber: '', meter: '' });
@@ -140,6 +141,10 @@ export default function DeliveryPage() {
     try {
       const result = await extractDeliveryData({ photoDataUri: base64Data });
       processExtractedData(result);
+
+      if (result.entries.length > 1 || fileInputRef.current?.value) {
+         setIsCameraDialogOpen(false);
+      }
     } catch (error) {
       console.error("Extraction error:", error);
       toast({
@@ -149,13 +154,6 @@ export default function DeliveryPage() {
       });
     } finally {
       setIsLoading(false);
-      // Close dialog only for multi-entry or file upload cases, or if single scan is successful
-      if (
-        (await extractDeliveryData({ photoDataUri: base64Data }).then(r => r.entries.length).catch(() => 0)) > 1 ||
-        fileInputRef.current?.value
-      ) {
-         setIsCameraDialogOpen(false);
-      }
     }
   };
 
@@ -410,38 +408,38 @@ export default function DeliveryPage() {
                       {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="max-w-md p-2">
-                    <DialogHeader>
-                      <DialogTitle>Scan Delivery Slip</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-2">
-                      <div className="relative">
-                          <video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline />
-                          <canvas ref={canvasRef} className="hidden" />
-                          {hasCameraPermission === false && (
-                              <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-md">
-                                  <Alert variant="destructive" className="m-4">
-                                      <AlertTitle>Camera Access Denied</AlertTitle>
-                                      <AlertDescription>Enable camera permissions to use this feature.</AlertDescription>
-                                  </Alert>
-                              </div>
-                          )}
-                          {isLoading && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-md">
-                               <Loader2 className="h-8 w-8 animate-spin text-white" />
-                            </div>
-                          )}
+                   <DialogContent className="max-w-full w-full h-full sm:max-w-md sm:h-auto p-0">
+                      <div className="flex flex-col h-full">
+                          <DialogHeader className="p-4 border-b">
+                              <DialogTitle>Scan Delivery Slip</DialogTitle>
+                          </DialogHeader>
+                          <div className="flex-grow bg-black relative">
+                              <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
+                              <canvas ref={canvasRef} className="hidden" />
+                              {hasCameraPermission === false && (
+                                  <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                                      <Alert variant="destructive" className="m-4">
+                                          <AlertTitle>Camera Access Denied</AlertTitle>
+                                          <AlertDescription>Enable camera permissions to use this feature.</AlertDescription>
+                                      </Alert>
+                                  </div>
+                              )}
+                              {isLoading && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                                   <Loader2 className="h-8 w-8 animate-spin text-white" />
+                                </div>
+                              )}
+                          </div>
+                          <div className="p-4 border-t grid grid-cols-2 gap-2">
+                              <Button onClick={handleCapture} disabled={!hasCameraPermission || isLoading}>
+                                  <CircleDotDashed className="mr-2" /> Capture
+                              </Button>
+                              <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={isLoading}>
+                                  <Upload className="mr-2" /> Upload
+                                  <input ref={fileInputRef} type="file" className="sr-only" accept="image/*" onChange={handleFileChange} />
+                              </Button>
+                          </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                          <Button onClick={handleCapture} disabled={!hasCameraPermission || isLoading}>
-                              <CircleDotDashed className="mr-2" /> Capture
-                          </Button>
-                          <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={isLoading}>
-                              <Upload className="mr-2" /> Upload
-                              <input ref={fileInputRef} type="file" className="sr-only" accept="image/*" onChange={handleFileChange} />
-                          </Button>
-                      </div>
-                    </div>
                   </DialogContent>
                 </Dialog>
 
