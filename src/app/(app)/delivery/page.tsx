@@ -364,14 +364,15 @@ export default function DeliveryPage() {
 
 
   return (
-    <div className="space-y-1">
-       <header className="px-2 pt-1 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-            <h1 className="text-sm font-bold text-gray-800">Delivery</h1>
+    <div className="space-y-4">
+      <header className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Delivery</h1>
+          <p className="text-muted-foreground">Log new deliveries and view history.</p>
         </div>
-        <div className="w-32">
+        <div className="w-40">
             <Select value={selectedList} onValueChange={setSelectedList}>
-              <SelectTrigger className="h-8">
+              <SelectTrigger>
                 <SelectValue placeholder="Select List" />
               </SelectTrigger>
               <SelectContent>
@@ -384,157 +385,166 @@ export default function DeliveryPage() {
         </div>
       </header>
 
-      <Card className="mx-2">
-        <CardContent className="p-2">
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-2">
-              <div className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
-                <FormField control={form.control} name="partyName" render={({ field }) => (
-                  <FormItem>
-                    <FormControl><Input placeholder="Party Name" {...field} className="h-8" /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="lotNumber" render={({ field }) => (
-                  <FormItem>
-                    <FormControl><Input placeholder="Lot No." {...field} className="h-8"/></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>New Delivery</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormField control={form.control} name="partyName" render={({ field }) => (
+                      <FormItem>
+                        <FormControl><Input placeholder="Party Name" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="lotNumber" render={({ field }) => (
+                      <FormItem>
+                        <FormControl><Input placeholder="Lot No." {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
 
-                <Dialog open={isCameraDialogOpen} onOpenChange={setIsCameraDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button type="button" variant="outline" size="icon" className="h-8 w-8" disabled={isScanDisabled}>
-                      {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1 space-y-4">
+                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <FormField control={form.control} name="takaNumber" render={({ field }) => (
+                            <FormItem>
+                              <FormControl><Input placeholder="Taka No." {...field} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                          <FormField control={form.control} name="meter" render={({ field }) => (
+                            <FormItem>
+                              <FormControl><Input placeholder="Meter" {...field} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                        </div>
+                    </div>
+                    <Button type="submit" className="h-10">
+                      <PlusCircle className="mr-2 h-4 w-4" /> Add
                     </Button>
-                  </DialogTrigger>
-                   <DialogContent className="max-w-full w-full h-full sm:max-w-md sm:h-auto p-0">
-                      <div className="flex flex-col h-full">
-                          <DialogHeader className="p-4 border-b">
-                              <DialogTitle>Scan Delivery Slip</DialogTitle>
-                          </DialogHeader>
-                          <div className="flex-grow bg-black relative">
-                              <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
-                              <canvas ref={canvasRef} className="hidden" />
-                              {hasCameraPermission === false && (
-                                  <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                                      <Alert variant="destructive" className="m-4">
-                                          <AlertTitle>Camera Access Denied</AlertTitle>
-                                          <AlertDescription>Enable camera permissions to use this feature.</AlertDescription>
-                                      </Alert>
-                                  </div>
-                              )}
-                              {isLoading && (
-                                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                                   <Loader2 className="h-8 w-8 animate-spin text-white" />
-                                </div>
-                              )}
+                  </div>
+                   <Dialog open={isCameraDialogOpen} onOpenChange={setIsCameraDialogOpen}>
+                      <DialogTrigger asChild>
+                         <Button type="button" variant="outline" className="w-full" disabled={isScanDisabled}>
+                          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+                          Scan Delivery Slip
+                        </Button>
+                      </DialogTrigger>
+                       <DialogContent className="max-w-full w-full h-full sm:max-w-md sm:h-auto p-0">
+                          <div className="flex flex-col h-full">
+                              <DialogHeader className="p-4 border-b">
+                                  <DialogTitle>Scan Delivery Slip</DialogTitle>
+                              </DialogHeader>
+                              <div className="flex-grow bg-black relative">
+                                  <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
+                                  <canvas ref={canvasRef} className="hidden" />
+                                  {hasCameraPermission === false && (
+                                      <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                                          <Alert variant="destructive" className="m-4">
+                                              <AlertTitle>Camera Access Denied</AlertTitle>
+                                              <AlertDescription>Enable camera permissions to use this feature.</AlertDescription>
+                                          </Alert>
+                                      </div>
+                                  )}
+                                  {isLoading && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                                       <Loader2 className="h-8 w-8 animate-spin text-white" />
+                                    </div>
+                                  )}
+                              </div>
+                              <div className="p-4 border-t grid grid-cols-2 gap-2">
+                                  <Button onClick={handleCapture} disabled={!hasCameraPermission || isLoading}>
+                                      <CircleDotDashed className="mr-2" /> Capture
+                                  </Button>
+                                  <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={isLoading}>
+                                      <Upload className="mr-2" /> Upload
+                                      <input ref={fileInputRef} type="file" className="sr-only" accept="image/*" onChange={handleFileChange} />
+                                  </Button>
+                              </div>
                           </div>
-                          <div className="p-4 border-t grid grid-cols-2 gap-2">
-                              <Button onClick={handleCapture} disabled={!hasCameraPermission || isLoading}>
-                                  <CircleDotDashed className="mr-2" /> Capture
-                              </Button>
-                              <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={isLoading}>
-                                  <Upload className="mr-2" /> Upload
-                                  <input ref={fileInputRef} type="file" className="sr-only" accept="image/*" onChange={handleFileChange} />
-                              </Button>
-                          </div>
-                      </div>
-                  </DialogContent>
-                </Dialog>
+                      </DialogContent>
+                    </Dialog>
+                </form>
+              </Form>
+            </CardContent>
+          </Card>
 
-              </div>
-              <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                <FormField control={form.control} name="takaNumber" render={({ field }) => (
-                  <FormItem>
-                    <FormControl><Input placeholder="Taka No." {...field} className="h-8"/></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="meter" render={({ field }) => (
-                  <FormItem>
-                    <FormControl><Input placeholder="Meter" {...field} className="h-8"/></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                 <Button type="submit" className="h-8">
-                  <PlusCircle className="mr-2 h-4 w-4" /> Add
-                </Button>
-              </div>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
-
-      <Card className="mx-2">
-        <CardHeader className="p-2">
-          <CardTitle className="text-base font-bold">Recent Deliveries</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {deliveryEntries.length > 0 ? (
-          <ScrollArea className="h-[calc(100vh-320px)]">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="p-1 text-[10px] font-bold h-7">Date</TableHead>
-                <TableHead className="p-1 text-[10px] font-bold h-auto">
-                    <div>Taka</div>
-                    <div className="text-xs text-primary font-bold">{totalTakas}</div>
-                </TableHead>
-                <TableHead className="p-1 text-[10px] font-bold h-7">M/C</TableHead>
-                <TableHead className="p-1 text-[10px] font-bold h-7">Meter</TableHead>
-                <TableHead className="p-1 text-[10px] font-bold h-7">Party</TableHead>
-                <TableHead className="p-1 text-[10px] font-bold h-7">Lot</TableHead>
-                <TableHead className="p-1 text-[10px] font-bold h-7 text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {[...deliveryEntries].sort((a, b) => new Date(b.deliveryDate.split('/').reverse().join('-')).getTime() - new Date(a.deliveryDate.split('/').reverse().join('-')).getTime() || (b.tpNumber || 0) - (a.tpNumber || 0) || parseInt(b.takaNumber) - parseInt(a.takaNumber)).map((entry) => (
-                <TableRow key={entry.id}>
-                  <TableCell className="p-1 text-[10px] font-bold truncate max-w-[35px]">{renderCellContent(entry, 'deliveryDate')}</TableCell>
-                  <TableCell className="p-1 text-[10px] font-bold">{renderCellContent(entry, 'takaNumber')}</TableCell>
-                  <TableCell className="p-1 text-[10px] font-bold">{renderCellContent(entry, 'machineNumber')}</TableCell>
-                  <TableCell className="p-1 text-[10px] font-bold">{renderCellContent(entry, 'meter')}</TableCell>
-                  <TableCell className="p-1 text-[10px] font-bold truncate max-w-[50px]">{renderCellContent(entry, 'partyName')}</TableCell>
-                  <TableCell className="p-1 text-[10px] font-bold">{renderCellContent(entry, 'lotNumber')}</TableCell>
-                  <TableCell className="p-1 text-[10px] font-bold text-right">
-                    {editingId === entry.id ? (
-                      <>
-                        <Button variant="ghost" size="icon" className="h-5 w-5 text-green-600" onClick={handleSaveClick}>
-                          <Check className="h-3 w-3" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive" onClick={handleCancelClick}>
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => handleEditClick(entry)}>
-                          <FilePenLine className="h-3 w-3" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive" onClick={() => handleDeleteClick(entry.id)}>
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-            <TableFooter>
-                <TableRow>
-                    <TableCell className="p-1 text-[12px] font-bold h-8" colSpan={3}>Total Meters</TableCell>
-                    <TableCell className="p-1 text-[12px] font-bold h-8">{totalMeters}</TableCell>
-                    <TableCell colSpan={3}></TableCell>
-                </TableRow>
-            </TableFooter>
-          </Table>
-          </ScrollArea>
-          ) : (
-            <p className="text-muted-foreground text-sm text-center py-4">No deliveries recorded yet.</p>
-          )}
-        </CardContent>
-      </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Deliveries</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {deliveryEntries.length > 0 ? (
+              <ScrollArea className="h-[calc(100vh-420px)] lg:h-[280px]">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="p-2 text-xs h-auto">Date</TableHead>
+                    <TableHead className="p-2 text-xs h-auto">
+                        <div>Taka</div>
+                        <div className="text-primary font-bold">{totalTakas}</div>
+                    </TableHead>
+                    <TableHead className="p-2 text-xs h-auto">M/C</TableHead>
+                    <TableHead className="p-2 text-xs h-auto">Meter</TableHead>
+                    <TableHead className="p-2 text-xs h-auto">Party</TableHead>
+                    <TableHead className="p-2 text-xs h-auto">Lot</TableHead>
+                    <TableHead className="p-2 text-xs h-auto text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {[...deliveryEntries].sort((a, b) => new Date(b.deliveryDate.split('/').reverse().join('-')).getTime() - new Date(a.deliveryDate.split('/').reverse().join('-')).getTime() || (b.tpNumber || 0) - (a.tpNumber || 0) || parseInt(b.takaNumber) - parseInt(a.takaNumber)).map((entry) => (
+                    <TableRow key={entry.id} className="h-10">
+                      <TableCell className="p-2 text-xs font-medium truncate max-w-[35px]">{renderCellContent(entry, 'deliveryDate')}</TableCell>
+                      <TableCell className="p-2 text-xs font-medium">{renderCellContent(entry, 'takaNumber')}</TableCell>
+                      <TableCell className="p-2 text-xs font-medium">{renderCellContent(entry, 'machineNumber')}</TableCell>
+                      <TableCell className="p-2 text-xs font-medium">{renderCellContent(entry, 'meter')}</TableCell>
+                      <TableCell className="p-2 text-xs font-medium truncate max-w-[50px]">{renderCellContent(entry, 'partyName')}</TableCell>
+                      <TableCell className="p-2 text-xs font-medium">{renderCellContent(entry, 'lotNumber')}</TableCell>
+                      <TableCell className="p-2 text-xs font-medium text-right">
+                        {editingId === entry.id ? (
+                          <>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-green-600" onClick={handleSaveClick}>
+                              <Check className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={handleCancelClick}>
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleEditClick(entry)}>
+                              <FilePenLine className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleDeleteClick(entry.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+                <TableFooter>
+                    <TableRow>
+                        <TableCell className="p-2 font-bold" colSpan={3}>Total Meters</TableCell>
+                        <TableCell className="p-2 font-bold">{totalMeters}</TableCell>
+                        <TableCell colSpan={3}></TableCell>
+                    </TableRow>
+                </TableFooter>
+              </Table>
+              </ScrollArea>
+              ) : (
+                <p className="text-muted-foreground text-sm text-center py-10">No deliveries recorded yet.</p>
+              )}
+            </CardContent>
+          </Card>
+      </div>
     </div>
   );
 }

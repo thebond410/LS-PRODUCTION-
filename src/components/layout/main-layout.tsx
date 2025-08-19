@@ -12,7 +12,7 @@ import { ProductionEntry, DeliveryEntry, Settings as AppSettings } from '@/types
 import { useToast } from '@/hooks/use-toast';
 
 const navItems = [
-    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, color: 'text-blue-500' },
+    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, color: 'text-sky-500' },
     { href: '/production', label: 'Production', icon: Package, color: 'text-orange-500' },
     { href: '/delivery', label: 'Delivery', icon: Truck, color: 'text-green-500' },
     { href: '/report', label: 'Report', icon: BarChart, color: 'text-purple-500' },
@@ -31,7 +31,6 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   const deliveryChannelRef = useRef<RealtimeChannel | null>(null);
   const settingsChannelRef = useRef<RealtimeChannel | null>(null);
 
-  // Effect for initial data load and setting up real-time subscriptions
   useEffect(() => {
     if (!isInitialized || !supabase) {
         if(isInitialized && !supabase) {
@@ -44,12 +43,11 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     const syncData = async () => {
       setIsLoading(true);
       try {
-        // Simple ping to check connection and table existence
         const { error: pingError } = await supabase
           .from('production_entries')
           .select('taka_number', { count: 'exact', head: true });
 
-        if (pingError && pingError.code === '42P01') { // table does not exist
+        if (pingError && pingError.code === '42P01') { 
             toast({
               variant: 'destructive',
               title: 'Database Setup Required',
@@ -63,7 +61,6 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
         dispatch({ type: 'SET_ONLINE_STATUS', payload: true });
 
-        // Fetch all data
         const [
           { data: remoteSettings, error: remoteSettingsError },
           { data: prodData, error: prodError },
@@ -97,7 +94,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         const errorCode = (error as PostgrestError)?.code;
         console.error('Supabase connection error:', errorMessage, error);
 
-        if (errorCode !== '42P01') { // Don't toast for missing tables, already handled
+        if (errorCode !== '42P01') { 
           toast({ variant: 'destructive', title: 'Sync Failed', description: `Could not connect to Supabase. ${errorMessage}` });
         }
       } finally {
@@ -107,7 +104,6 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     
     syncData();
 
-    // --- REAL-TIME SUBSCRIPTIONS ---
     if(productionChannelRef.current) supabase.removeChannel(productionChannelRef.current);
     if(deliveryChannelRef.current) supabase.removeChannel(deliveryChannelRef.current);
     if(settingsChannelRef.current) supabase.removeChannel(settingsChannelRef.current);
@@ -166,7 +162,11 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
           }
       });
 
-    const handleOnline = () => dispatch({ type: 'SET_ONLINE_STATUS', payload: true });
+    const handleOnline = () => {
+      if(!state.isOnline) {
+        syncData();
+      }
+    };
     const handleOffline = () => dispatch({ type: 'SET_ONLINE_STATUS', payload: false });
 
     window.addEventListener('online', handleOnline);
@@ -183,22 +183,25 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
 
   return (
-    <div className="flex flex-col h-screen w-full bg-background md:max-w-none max-w-md mx-auto">
-       <header className="sticky top-0 z-10 h-14 bg-card border-b border-border/60">
-        <nav className="flex items-center justify-between h-full px-2">
-            <div className="flex items-center justify-around h-full">
+    <div className="flex flex-col h-screen w-full bg-secondary md:max-w-none max-w-md mx-auto">
+       <header className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm">
+        <nav className="flex items-center justify-between h-16 px-4 md:px-6">
+            <div className="flex items-center justify-around h-full flex-1">
                 {navItems.map((item) => {
                     const isActive = pathname === item.href;
                     return (
                         <Link href={item.href} key={item.href}>
                             <div
                                 className={cn(
-                                'flex flex-col items-center justify-center text-muted-foreground w-16 h-full transition-colors duration-200',
-                                isActive ? item.color : 'hover:text-primary/80'
+                                'flex flex-col items-center justify-center text-muted-foreground w-16 h-full transition-colors duration-200 relative',
+                                isActive ? 'text-primary' : 'hover:text-primary/80'
                                 )}
                             >
-                                <item.icon className={cn("w-5 h-5", item.color)} />
-                                <span className={cn("text-xs font-medium", isActive ? `font-bold ${item.color}`: '')}>{item.label}</span>
+                                <item.icon className="w-6 h-6" />
+                                <span className="text-xs font-medium">{item.label}</span>
+                                {isActive && (
+                                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-1 bg-primary rounded-t-full" />
+                                )}
                             </div>
                         </Link>
                     )
@@ -215,7 +218,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             </div>
         </nav>
       </header>
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto p-2 md:p-4">
         {children}
       </main>
     </div>
