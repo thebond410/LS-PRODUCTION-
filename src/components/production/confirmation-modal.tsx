@@ -16,7 +16,7 @@ interface ConfirmationModalProps {
 
 export function ConfirmationModal({ isOpen, onOpenChange, data }: ConfirmationModalProps) {
   const { state, dispatch } = useAppContext();
-  const { settings, supabase } = state;
+  const { settings, productionEntries, supabase } = state;
   const { toast } = useToast();
 
   const handleConfirm = async () => {
@@ -26,24 +26,39 @@ export function ConfirmationModal({ isOpen, onOpenChange, data }: ConfirmationMo
        return;
     }
 
+    const existingTakaNumbers = new Set(productionEntries.map(e => e.takaNumber));
     const validEntries: ProductionEntry[] = [];
-    const invalidEntries: string[] = [];
+    const invalidMachineEntries: string[] = [];
+    const duplicateEntries: string[] = [];
     
     data.forEach(entry => {
+      if (existingTakaNumbers.has(entry.takaNumber)) {
+        duplicateEntries.push(entry.takaNumber);
+        return;
+      }
+      
       const machineNum = parseInt(entry.machineNumber, 10);
       if (isNaN(machineNum) || machineNum > settings.maxMachineNumber) {
-        invalidEntries.push(`Taka ${entry.takaNumber} (Machine ${entry.machineNumber})`);
+        invalidMachineEntries.push(`Taka ${entry.takaNumber} (Machine ${entry.machineNumber})`);
       } else {
         validEntries.push(entry);
       }
     });
     
-    if (invalidEntries.length > 0) {
+    if (invalidMachineEntries.length > 0) {
       toast({
         variant: "destructive",
         title: "Invalid Machine Number",
-        description: `The following entries have machine numbers exceeding the maximum of ${settings.maxMachineNumber}: ${invalidEntries.join(', ')}`,
+        description: `The following entries have machine numbers exceeding the maximum of ${settings.maxMachineNumber}: ${invalidMachineEntries.join(', ')}`,
       });
+    }
+    
+    if (duplicateEntries.length > 0) {
+        toast({
+            variant: "destructive",
+            title: "Duplicate Entries Skipped",
+            description: `The following taka numbers already exist and were skipped: ${duplicateEntries.join(', ')}`,
+        });
     }
 
     if (validEntries.length > 0) {
@@ -60,7 +75,7 @@ export function ConfirmationModal({ isOpen, onOpenChange, data }: ConfirmationMo
         dispatch({ type: 'ADD_PRODUCTION_ENTRIES', payload: validEntries });
         toast({
           title: "Success",
-          description: `${validEntries.length} production entries have been added.`,
+          description: `${validEntries.length} new production entries have been added.`,
         });
       }
     }
